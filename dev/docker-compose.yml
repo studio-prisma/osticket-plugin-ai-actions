@@ -1,0 +1,40 @@
+# Local test stack for the AI Actions plugin.
+#
+#   ./dev/up.sh       build, install osTicket, seed test data
+#   ./dev/down.sh     stop and delete everything
+#
+# Ports bind to 127.0.0.1 only. Additional plugins can be mounted through
+# dev/local/compose.override.yml (git-ignored).
+name: spa-dev
+
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: osticket
+      MARIADB_USER: osticket
+      MARIADB_PASSWORD: ${SPA_DB_PASSWORD:?run dev/up.sh}
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+    tmpfs:
+      - /var/lib/mysql
+
+  mail:
+    image: axllent/mailpit:v1.21.8
+    ports:
+      - "127.0.0.1:${SPA_MAIL_PORT:-8027}:8025"
+
+  osticket:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${SPA_HTTP_PORT:-8089}:80"
+    volumes:
+      - ..:/var/www/html/include/plugins/ai-actions:ro
+      - ./seed:/seed:ro

@@ -1,0 +1,38 @@
+# Local test stack
+
+osTicket 1.18.4 on PHP 8.3 / Apache, MariaDB 11.4 and Mailpit, all on `127.0.0.1`. For development only.
+
+```bash
+./dev/up.sh      # build, install, seed
+./dev/down.sh    # stop and delete (the database lives on tmpfs)
+```
+
+`up.sh` generates all passwords on the first run into `dev/local/credentials.env`. `dev/local/` is git-ignored; nothing secret is part of the repository. The seed writes ticket and agent IDs to `dev/local/seed.json`.
+
+| URL | What |
+|---|---|
+| `http://127.0.0.1:8089/` | Client portal |
+| `http://127.0.0.1:8089/scp/` | Agent panel |
+| `http://127.0.0.1:8027/` | Mailpit: every mail osTicket sends |
+
+The ports differ from the Ticket Board's stack (8088/8026), so both can run at the same time.
+
+The repository root is mounted read-only as `include/plugins/ai-actions`, so edits show up without a rebuild. The plugin is installed and enabled by the seed.
+
+## Test data
+
+`seed/seed.php` creates one customer, three tickets and two agents besides the installer's admin. The comment at the top of the file lists them. T2 carries a prompt injection in the customer's message: no test may ever see the plugin act on it.
+
+## Mounting other plugins
+
+Create `dev/local/compose.override.yml`. `up.sh` picks it up automatically. Relative paths resolve against `dev/`:
+
+```yaml
+services:
+  osticket:
+    volumes:
+      - ./local/plugins/board:/var/www/html/include/plugins/board:ro
+      - ./local/seed:/seed-local:ro                           # optional seed hook
+```
+
+If `dev/local/seed/seed.php` exists, the main seed runs it at the end, with `q()`, `scalar()`, `fail()` and `$ost` in scope. It must not write to stdout.

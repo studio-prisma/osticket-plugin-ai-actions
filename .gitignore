@@ -1,0 +1,38 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backup / temp
+*.bak
+*.tmp
+*.log
+*~
+
+# Build output
+dist/
+*.zip
+
+# Test artefacts
+tests/failcopy/
+tests/www/*.log
+__pycache__/
+*.pyc
+
+# Local-only
+local/
+private/
+.drafts/
+
+# Dependencies (built into dist/ by tools/build-zip.sh)
+vendor/
+vendor-scoped/
+
+# E2E
+node_modules/
