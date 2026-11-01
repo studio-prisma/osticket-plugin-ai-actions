@@ -61,6 +61,8 @@ test('AI agent: created as an osTicket agent, assignable, listed', async ({ page
   const id = await createAgent(page, 'Prisma Test');
   const [backend, email, active] = sql(`SELECT backend, email, isactive FROM ost_staff WHERE staff_id=${id}`).split('\t');
   expect(backend).toBe('ai-agent');
+  // An unknown bcrypt hash, set past the password policies (a policy plugin rejected a random value with a 500).
+  expect(sql(`SELECT LEFT(passwd, 4) FROM ost_staff WHERE staff_id=${id}`)).toMatch(/^\$2[aby]\$$/);
   expect(email).toMatch(/^ai-prisma-test-[0-9a-f]{6}@example\.com$/);
   expect(active).toBe('1');
   await expect(page.locator('table.list')).toContainText('Prisma Test');

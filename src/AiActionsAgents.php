@@ -10,7 +10,10 @@ declare(strict_types=1);
  *   1. backend "ai-agent", which no authentication backend answers to, so
  *      StaffAuthenticationBackend::isBackendAllowed() refuses every login
  *      and every password reset;
- *   2. a random 64-character password that is never stored or shown;
+ *   2. a bcrypt hash of 256 random bits, written straight to the record and
+ *      never stored anywhere else. Not through setPassword(): osTicket runs
+ *      that through the password policies, and a policy plugin that rejects
+ *      the value throws and aborts the request;
  *   3. auth.login.succeeded / auth.pwreset.login end the session at once,
  *      should a future osTicket version let one through.
  *
@@ -120,15 +123,23 @@ final class AiActionsAgents
             'role_id'   => $roleId,
             'backend'   => self::BACKEND,
             'isvisible' => 1,
-            'passwd1'   => bin2hex(random_bytes(32)),
             'notes'     => 'AI agent of the AI Actions plugin. Nobody can sign in with this account.',
             'perms'     => array(),
         );
         $errors = array();
         $staff = Staff::create();
-        if (!$staff->update($vars, $errors)) {
+        try {
+            $ok = $staff->update($vars, $errors);
+        } catch (Throwable $e) {
+            error_log('ai-actions: AI agent not created: ' . get_class($e));
+            return array('id' => 0, 'errors' => array('err' => 'osTicket refused the account (' . get_class($e) . ').'));
+        }
+        if (!$ok) {
             return array('id' => 0, 'errors' => $errors ?: array('err' => 'osTicket refused the account.'));
         }
+        // An unknown password instead of none, so no login path ever depends on how an empty hash compares.
+        $staff->passwd = Passwd::hash(bin2hex(random_bytes(32)));
+        $staff->save();
         db_query(sprintf("INSERT INTO `%s` (staff_id, persona, model, active, created) VALUES (%d, %s, %s, 1, NOW())",
             self::table(), (int) $staff->getId(), db_input($persona), db_input($model)));
         self::$ids = null;

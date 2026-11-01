@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.1] - 2026-11-01
 
+### Fixed
+
+- Creating an AI agent failed with an HTTP 500 where a password policy plugin is active: the account got a random password, the policy rejected it and threw. AI agents now get the bcrypt hash of a random value written directly, past the policies (the unknown backend and the session check still block any login); errors while creating show as a message.
+
 ### Added
 
 - "AI Actions" under Applications in the agent panel, linking to the page with AI agents, rules, log and status. Non-admins see a short note instead of the forms.
