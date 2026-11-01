@@ -45,6 +45,16 @@ class AiActionsConfig extends PluginConfig
                 'configuration' => array('multiselect' => true, 'prompt' => 'None'),
             )),
 
+            'allow_send' => new BooleanField(array(
+                'label'         => 'Allow sending replies',
+                'default'       => false,
+                'configuration' => array(
+                    'desc' => 'The AI may plan an email reply to the customer. It is sent only after the agent '
+                            . 'clicks Run in a preview that shows the full text and the recipients; it cannot be undone. '
+                            . 'Off: replies only as drafts.',
+                ),
+            )),
+
             'sec_api' => new SectionBreakField(array(
                 'label' => 'Claude API',
             )),
@@ -88,11 +98,18 @@ class AiActionsConfig extends PluginConfig
 
             'model' => new ChoiceField(array(
                 'label'   => 'Model',
-                'default' => 'claude-opus-5-5',
+                'default' => 'claude-sonnet-5-5',
                 'choices' => array(
-                    'claude-opus-5-5'   => 'Claude Opus 5.5',
-                    'claude-sonnet-5-5' => 'Claude Sonnet 5.5 (cheaper)',
+                    'claude-sonnet-5-5'     => 'Anthropic: Claude Sonnet 5.5',
+                    'claude-opus-5-5'       => 'Anthropic: Claude Opus 5.5 (strongest, dearer)',
+                    'gpt-6.1-sol'           => 'OpenAI: GPT-6.1 Sol',
+                    'gpt-6.1-terra'         => 'OpenAI: GPT-6.1 Terra (cheaper)',
+                    'mistral-large-latest'  => 'Mistral (EU): Mistral Large',
+                    'mistral-medium-latest' => 'Mistral (EU): Mistral Medium (cheaper)',
                 ),
+                'hint'    => 'The provider follows from the model; the API key must be one of that provider. '
+                           . 'Environment variable: ANTHROPIC_API_KEY, OPENAI_API_KEY or MISTRAL_API_KEY. '
+                           . 'PDFs and images in attachments are read by Claude models only.',
             )),
 
             'effort' => new ChoiceField(array(
@@ -219,8 +236,11 @@ class AiActionsConfig extends PluginConfig
             $errors['err'] = 'Own image: an https:// address or a path starting with /, without spaces or quotes.';
             return false;
         }
-        if ($pasted !== '' && !AiActionsKey::isKey($pasted)) {
-            $errors['err'] = 'That doesn\'t look like an Anthropic API key (sk-ant-…). Nothing was saved.';
+        $model = AiActionsController::keyList($config['model'] ?? null, '/^[a-z0-9.-]+$/')[0] ?? 'claude-sonnet-5-5';
+        $provider = AiActionsController::provider($model);
+        if ($pasted !== '' && !AiActionsKey::isKey($pasted, $provider)) {
+            $names = array('anthropic' => 'Anthropic (sk-ant-…)', 'openai' => 'OpenAI (sk-…)', 'mistral' => 'Mistral (32 letters and digits)');
+            $errors['err'] = 'That doesn\'t look like an API key of ' . $names[$provider] . ', the provider of the chosen model. Nothing was saved.';
             return false;
         }
         if ($pasted !== '') {

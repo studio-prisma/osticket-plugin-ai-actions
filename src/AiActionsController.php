@@ -21,14 +21,17 @@ final class AiActionsController
 {
     public const PROMPT_MAX = 2000;
 
-    public const MODELS = array('claude-opus-5-5', 'claude-sonnet-5-5');
+    /** The first one is the default. The prefix picks the provider, see provider(). */
+    public const MODELS = array('claude-sonnet-5-5', 'claude-opus-5-5', 'gpt-6.1-sol', 'gpt-6.1-terra',
+                                'mistral-large-latest', 'mistral-medium-latest');
     public const EFFORTS = array('low', 'medium', 'high');
 
     /** @var array */
     private static $settings = array('enabled' => false, 'roles' => array(), 'model' => 'claude-opus-5-5',
                                      'effort' => 'low', 'key_source' => 'file', 'key_file' => '', 'daily_requests' => 100,
                                      'daily_tokens' => 500000, 'thread_chars' => 12000, 'history_days' => 90,
-                                     'name' => '', 'icon' => 'sparkles', 'image' => '', 'accent' => '', 'welcome' => '');
+                                     'name' => '', 'icon' => 'sparkles', 'image' => '', 'accent' => '', 'welcome' => '',
+                                     'allow_send' => false);
 
     /** Icons for the bubble and the window header; "image" uses the image setting. */
     public const ICONS = array('sparkles', 'robot', 'chat', 'bulb', 'bolt', 'initial', 'image');
@@ -51,7 +54,7 @@ final class AiActionsController
     /** Public for the unit tests. */
     public static function normalise(array $raw): array
     {
-        $model = self::keyList($raw['model'] ?? null, '/^claude-[a-z0-9-]+$/');
+        $model = self::keyList($raw['model'] ?? null, '/^[a-z0-9.-]+$/');
         $effort = self::keyList($raw['effort'] ?? null, '/^[a-z]+$/');
         return array(
             'enabled'  => !empty($raw['enabled']),
@@ -74,6 +77,7 @@ final class AiActionsController
             'accent'  => is_string($raw['accent'] ?? null) && preg_match('/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', trim($raw['accent']))
                 ? strtolower(trim($raw['accent'])) : '',
             'welcome' => self::welcome($raw['welcome'] ?? null),
+            'allow_send' => !empty($raw['allow_send']),
         );
     }
 
@@ -220,6 +224,7 @@ final class AiActionsController
         }
 
         $t = AiActionsI18n::strings(self::language($thisstaff));
+        AiActionsExtensions::bind($ticket, $thisstaff);
         $context = self::context($thisstaff, $ticket, $chat['seen_entry']);
         $choices = AiActionsChoices::forTicket($ticket, $thisstaff);
         $context['options'] = AiActionsChoices::render($choices);
@@ -227,7 +232,13 @@ final class AiActionsController
             ? AiActionsPlanner::nextMessage($context['data'], $chat['pending'], $prompt, $context['options'])
             : AiActionsPlanner::firstMessage($context, $prompt);
         try {
-            $result = (new AiActionsPlanner($llm, $choices))->turn(AiActionsPlanner::system($context), $chat['messages'], $blocks);
+            $tz = $context['timezone'];
+            // Documents and images only for Claude; other providers get a note instead.
+            $files = self::provider(self::$settings['model']) === 'anthropic';
+            $reader = static function (string $name, array $input) use ($ticket, $thisstaff, $tz, $files) {
+                return AiActionsReaders::run($name, $input, $ticket, $thisstaff, $tz, $files);
+            };
+            $result = (new AiActionsPlanner($llm, $choices, $reader))->turn(AiActionsPlanner::system($context), $chat['messages'], $blocks);
         } catch (AiActionsLlmError $e) {
             // Status and error type only: the detail never carries the key or the prompt.
             error_log(sprintf('ai-actions: model call failed (%s) %s', $e->kind, $e->getMessage()));
@@ -280,6 +291,7 @@ final class AiActionsController
         }
 
         $t = AiActionsI18n::strings(self::language($thisstaff));
+        AiActionsExtensions::bind($ticket, $thisstaff);
         $results = array();
         $assigned = false;
         foreach (AiActionsTools::inRunOrder($run['changes']) as $c) {
@@ -308,6 +320,7 @@ final class AiActionsController
             );
             // A change can alter what the agent may do next (e.g. a transfer).
             $ticket = Ticket::lookup($ticket->getId());
+            AiActionsExtensions::bind($ticket, $thisstaff);
         }
         AiActionsRunStore::finish($run['id'], $results);
         $public = self::publicResults($results);
@@ -318,7 +331,7 @@ final class AiActionsController
             'note'  => new TextThreadEntryBody(self::noteBody($run['prompt'], $public, $t)),
         ), $errors, $thisstaff);
         $undoable = (bool) array_filter($results, function ($r) {
-            return $r['ok'] && !$r['unchanged'] && !in_array($r['action'], AiActionsTools::NO_UNDO, true);
+            return $r['ok'] && !$r['unchanged'] && AiActionsTools::undoable((string) $r['action']);
         });
         AiActionsChatStore::planOutcome($staffId, (int) $ticket->getId(), $run['id'], 'done', $public,
             $undoable ? array('undo_until' => time() + AiActionsRunStore::UNDO_WINDOW) : array());
@@ -350,7 +363,7 @@ final class AiActionsController
         $undone = array();
         foreach (array_reverse($run['results']) as $r) {
             if (empty($r['ok']) || !empty($r['unchanged']) || empty($r['action'])
-                    || in_array($r['action'], AiActionsTools::NO_UNDO, true)) {
+                    || !AiActionsTools::undoable((string) $r['action'])) {
                 continue;
             }
             $u = AiActionsExecutor::undo($ticket, $thisstaff, (string) $r['action'], $r['previous'] ?? null);
@@ -538,13 +551,32 @@ final class AiActionsController
         if (getenv('SPA_AI_FAKE') === '1') {
             return new AiActionsFakeLlm(AiActionsTime::now(AiActionsTime::zone($GLOBALS['thisstaff']))->format('Y-m-d'));
         }
+        $provider = self::provider(self::$settings['model']);
         $key = AiActionsKey::load(self::$settings['key_source'], self::$settings['key_file'],
-            defined('ROOT_DIR') ? ROOT_DIR : dirname(INCLUDE_DIR), self::$storedKey);
+            defined('ROOT_DIR') ? ROOT_DIR : dirname(INCLUDE_DIR), self::$storedKey, $provider);
         if ($key['key'] === null) {
-            error_log('ai-actions: no usable API key (' . self::$settings['key_source'] . ': ' . $key['problem'] . ')');
+            error_log('ai-actions: no usable API key (' . $provider . ', ' . self::$settings['key_source'] . ': ' . $key['problem'] . ')');
             return null;
         }
+        switch ($provider) {
+            case 'openai':
+                return new AiActionsOpenAi($key['key'], self::$settings['model'], self::$settings['effort']);
+            case 'mistral':
+                return new AiActionsMistral($key['key'], self::$settings['model']);
+        }
         return new AiActionsClaude($key['key'], self::$settings['model'], self::$settings['effort']);
+    }
+
+    /** anthropic, openai or mistral, from the model ID. Public for the unit tests and the settings form. */
+    public static function provider(string $model): string
+    {
+        if (strpos($model, 'gpt-') === 0) {
+            return 'openai';
+        }
+        if (strpos($model, 'mistral-') === 0) {
+            return 'mistral';
+        }
+        return 'anthropic';
     }
 
     private static function context($staff, $ticket, int $seenEntry = 0): array

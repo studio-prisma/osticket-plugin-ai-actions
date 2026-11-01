@@ -61,8 +61,8 @@ final class AiActionsContext
             );
         }
 
-        return array('text' => self::render($facts, $entries, $since > 0, $max, self::related($ticket, $staff, $dbTz, $tz)),
-                     'last' => $last);
+        return array('text' => self::render($facts, $entries, $since > 0, $max, self::related($ticket, $staff, $dbTz, $tz),
+                     AiActionsReaders::listing($ticket)), 'last' => $last);
     }
 
     /**
@@ -113,10 +113,11 @@ final class AiActionsContext
      * @param array<int,array{type:string,poster:string,created:string,text:string}> $entries newest first
      * @param bool $update later turn of a conversation: only new entries
      * @param string[] $related parent and sub-tickets, one line each
+     * @param string[] $files attachments, one line each (read_attachment)
      * Public for the unit tests.
      */
     public static function render(array $facts, array $entries, bool $update = false, int $max = self::THREAD_MAX,
-                                  array $related = array()): string
+                                  array $related = array(), array $files = array()): string
     {
         $lines = array($update ? 'Ticket facts now:' : 'Ticket facts:');
         foreach ($facts as $k => $v) {
@@ -127,6 +128,13 @@ final class AiActionsContext
             $lines[] = 'Related tickets (only those the agent may open):';
             foreach ($related as $r) {
                 $lines[] = '- ' . self::clean($r, 400);
+            }
+        }
+        if ($files) {
+            $lines[] = '';
+            $lines[] = 'Attachments (read them with read_attachment):';
+            foreach ($files as $f) {
+                $lines[] = '- ' . self::clean($f, 200);
             }
         }
         $lines[] = '';
@@ -164,7 +172,7 @@ final class AiActionsContext
      * contain any of them, so it can neither end its own block nor fake an
      * agent request, a plan result or the list of allowed values.
      */
-    public const CONTROL_TAGS = '#<\s*/?\s*(ticket_data|agent_request|plan_result|ticket_options)\b[^>]*>#i';
+    public const CONTROL_TAGS = '#<\s*/?\s*(ticket_data|agent_request|plan_result|ticket_options|attachment_data)\b[^>]*>#i';
 
     /** Valid UTF-8, no block tag, bounded length. */
     private static function clean(string $s, int $max): string

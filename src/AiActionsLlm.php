@@ -26,6 +26,7 @@ interface AiActionsLlm
  *   "sales"                       transfer to the Sales department
  *   "note" / "notiz"             an internal note
  *   "draft" / "entwurf"          a reply draft (with markup, to prove it is escaped)
+ *   "send" / "sende"             a sent reply (only when offered)
  *   "sub-ticket" / "unterticket" a sub-ticket
  * Everything else gets a fixed answer.
  *
@@ -93,6 +94,9 @@ final class AiActionsFakeLlm implements AiActionsLlm
         );
         if (preg_match('/\b(note|notiz)/iu', $prompt)) {
             $calls[] = array('add_internal_note', array('text' => 'Fake note: customer called back.'));
+        }
+        if (preg_match('/\b(send|sende)/iu', $prompt) && strpos($options, 'send_reply:') !== false) {
+            $calls[] = array('send_reply', array('text' => "Hello,\n\nyour request is solved.\n\nBest regards"));
         }
         if (preg_match('/\b(draft|entwurf)/iu', $prompt)) {
             $calls[] = array('draft_reply', array('text' => "Hello,\n\nthanks for your message. <b>We are on it.</b>\n\nBest regards"));

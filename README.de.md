@@ -15,7 +15,9 @@ Ein Chat im Agenten-Bereich von osTicket, der Anfragen in Alltagssprache über d
 |---|---|
 | Wo | Eine Bubble unten rechts im Agenten-Bereich. Das Gespräch gehört zum offenen Ticket: Ticketansicht oder eine Karte in der Schnellansicht des [Ticket Boards](https://github.com/studio-prisma/osticket-plugin-board) |
 | Fragen | „Was will die Kundin eigentlich?“, „Fasse den Verlauf zusammen“. Beantwortet aus Ticketdaten und Verlauf, es ändert sich nichts |
-| Änderungen | Fälligkeit, Priorität, Zuweisung an Agent oder Team, Abteilung, Status, interne Notiz, Antwortentwurf, Unter-Ticket |
+| Änderungen | Fälligkeit, Priorität, Zuweisung an Agent oder Team, Abteilung, Status, interne Notiz, Antwortentwurf, Unter-Ticket, gesendete Antwort (Einstellung, Standard aus), Aktionen anderer Plugins ([EXTENSIONS](docs/EXTENSIONS.md)) |
+| Lesen | Eltern-Ticket und Unter-Tickets, die der Agent öffnen darf; Anhänge (Textdateien; PDFs und Bilder mit Claude) |
+| Anbieter | Anthropic (Claude Sonnet 5.5, Opus 5.5), OpenAI (GPT-6.1 Sol, Terra), Mistral (Large, Medium; EU) |
 | Vorschau | Jede geplante Änderung als Zeile mit osTickets eigenen Bezeichnungen, Notizen und Entwürfe mit vollem Text. **Ausführen** oder **Verwerfen** |
 | Rückgängig | 30 Sekunden nach dem Ausführen, für jede Feldänderung (nicht für Notizen, Entwürfe und Unter-Tickets). Danach bleibt der Knopf ausgegraut stehen |
 | Aktualisieren | Nach Ausführen oder Rückgängig lädt die Ticketansicht neu, auf dem Board öffnet sich die Schnellansicht mit den neuen Werten wieder |
@@ -73,7 +75,8 @@ Kurzfassung:
 | API key file | leer | Für „Key file“: absoluter Pfad zu einer Datei, die nur den Key enthält. Dateien im osTicket-Verzeichnis werden abgelehnt |
 | API key | leer | Für „Stored here“: der Key, von osTicket mit `SECRET_SALT` aus `ost-config.php` verschlüsselt; wird nie wieder angezeigt, leeres Feld behält ihn |
 | Remove the stored key | aus | Löscht den gespeicherten Key beim Speichern |
-| Model | Claude Opus 5.5 | Oder Claude Sonnet 5.5 (günstiger) |
+| Allow sending replies | aus | Die AI darf eine E-Mail-Antwort planen; gesendet erst nach Ausführen, nicht rückgängig zu machen |
+| Model | Claude Sonnet 5.5 | Auch Claude Opus 5.5, GPT-6.1 Sol/Terra, Mistral Large/Medium. Das Modell bestimmt den Anbieter; der Key muss von diesem Anbieter sein (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`) |
 | Effort | Low | Wie lange das Modell nachdenkt. Low reicht für die meisten Anfragen |
 | Messages | 100 | Pro Agent und Tag, 0 = kein Limit |
 | Tokens | 500.000 | Input plus Output pro Agent und Tag, 0 = kein Limit |

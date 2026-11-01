@@ -180,6 +180,8 @@ Erst danach weitere Rollen freigeben.
 
 Den Ordner `include/plugins/ai-actions/` durch das neue Release ersetzen. Einstellungen bleiben in osTickets Konfigurationstabelle, die Key-Datei bleibt, wo sie ist. Vorher das CHANGELOG lesen: Ein Sprung der Hauptversion heißt geändertes Verhalten oder geänderte Einstellungen.
 
+Von 0.2.x auf 0.3.0: neue Einstellung „Allow sending replies“ (aus) und die Modelle der weiteren Anbieter. Standardmodell ist jetzt Claude Sonnet 5.5; eine Instanz behält ihr eingestelltes Modell.
+
 Von 0.1.x auf 0.2.0: Das Plugin legt die Tabelle `ost_ai_actions_chat_archive` beim ersten Aufruf selbst an. Neue Einstellungen starten mit ihren Standards (kein Name, Funkel-Icon, Theme-Farbe, 90 Tage frühere Gespräche).
 
 ## Deinstallieren

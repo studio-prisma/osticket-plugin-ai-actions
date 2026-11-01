@@ -180,6 +180,8 @@ Only then select further roles.
 
 Replace the folder `include/plugins/ai-actions/` with the new release. Settings stay in osTicket's config table, the key file stays where it is. Read the CHANGELOG first: a major version bump means changed behaviour or settings.
 
+From 0.2.x to 0.3.0: new settings "Allow sending replies" (off) and the provider models. The default model is now Claude Sonnet 5.5, but an instance keeps the model it has.
+
 From 0.1.x to 0.2.0: the plugin adds the table `ost_ai_actions_chat_archive` by itself on first use. New settings start at their defaults (no name, sparkles icon, theme colour, 90 days of earlier conversations).
 
 ## Uninstalling

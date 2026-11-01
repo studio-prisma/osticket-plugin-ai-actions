@@ -25,12 +25,15 @@ require_once INCLUDE_DIR . 'class.dispatcher.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/src/AiActionsI18n.php';
 require_once __DIR__ . '/src/AiActionsTools.php';
+require_once __DIR__ . '/src/AiActionsExtensions.php';
 require_once __DIR__ . '/src/AiActionsChoices.php';
 require_once __DIR__ . '/src/AiActionsLlm.php';
 require_once __DIR__ . '/src/AiActionsKey.php';
 require_once __DIR__ . '/src/AiActionsClaude.php';
+require_once __DIR__ . '/src/AiActionsProviders.php';
 require_once __DIR__ . '/src/AiActionsTime.php';
 require_once __DIR__ . '/src/AiActionsContext.php';
+require_once __DIR__ . '/src/AiActionsReaders.php';
 require_once __DIR__ . '/src/AiActionsPlanner.php';
 require_once __DIR__ . '/src/AiActionsRunStore.php';
 require_once __DIR__ . '/src/AiActionsChatStore.php';
@@ -42,7 +45,7 @@ require_once __DIR__ . '/src/AiActionsController.php';
 class AiActionsPlugin extends Plugin
 {
     /** Mirrors plugin.php; used for cache-busting the asset URLs only. */
-    public const VERSION = '0.2.0';
+    public const VERSION = '0.3.0';
 
     /** Route base, relative to ROOT_PATH. */
     public const STAFF_BASE = 'scp/ajax.php/ai';
@@ -85,6 +88,7 @@ class AiActionsPlugin extends Plugin
             'image'    => $config->get('assistant_image'),
             'accent'   => $config->get('accent'),
             'welcome'  => $config->get('welcome'),
+            'allow_send' => $config->get('allow_send'),
         ), static function () use ($config) {
             // PluginConfig decrypts PasswordField values when it loads.
             $v = $config->get('key_stored');

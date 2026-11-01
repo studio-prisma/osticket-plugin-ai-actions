@@ -6,7 +6,7 @@ Only the latest minor release receives security fixes. Older tags are archived, 
 
 | Version | Supported |
 |---|---|
-| `0.1.x` | yes |
+| `0.3.x` | yes |
 | everything older | no |
 
 ## Reporting a Vulnerability
@@ -33,6 +33,8 @@ Expected response: an acknowledgement within 7 days, an assessment within 30. Th
 - **Prompt injection that gets past the preview.** Ticket content that makes the plugin change the ticket without a confirmed preview, reach another ticket, send anything, or put a planned change on screen in a way that hides what it does.
 - **Ticket content leaking to the wrong place**: another ticket's data in the model's context, an internal note in a reply draft without the agent's request, conversation history in another agent's chat.
 - **The API key** in a response, a log line, a prompt, an error message, the release package, or in clear text in the database; a key file inside the osTicket directory being accepted; content of a file that isn't a key being sent anywhere.
+- **A reply sent without the agent's click on Run**, while "Allow sending replies" is off, or to anyone but the ticket owner and its active collaborators.
+- **Reading another ticket or a file through the read tools** that isn't the parent, a sub-ticket or an attachment of the open ticket, or that the agent can't open.
 - **Model or plugin output rendered as markup** in the chat, the preview, notes or drafts.
 - **Path traversal or arbitrary file reads** through the asset route or the key file setting.
 - **Getting past the daily limits** or the one-message-at-a-time lock.
@@ -41,7 +43,8 @@ Expected response: an acknowledgement within 7 days, an assessment within 30. Th
 
 Documented design decisions are not findings.
 
-- **Ticket content goes to Anthropic.** That's what the plugin does. Data processing agreements and privacy notices are the operator's job.
+- **Ticket content goes to the chosen provider** (Anthropic, OpenAI or Mistral), including attachments the model reads. That's what the plugin does. Data processing agreements and privacy notices are the operator's job.
+- **Actions added by other plugins** through `ai-actions.tools` run that plugin's code with the agent; their permission checks are that plugin's responsibility.
 - **The model can be wrong, or be talked into a plan.** A bad suggestion that the agent sees in the preview and could reject is not a vulnerability; the preview and the confirmation are the control. A plan the agent confirms runs with the agent's rights.
 - **Prompt injection that only changes the model's answer text** (a misleading summary) without a change, a leak or a hidden preview.
 - **Closing after an assignment in the same plan keeps the new assignee**, unlike osTicket's own close.

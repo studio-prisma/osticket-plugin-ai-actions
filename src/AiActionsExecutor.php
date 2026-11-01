@@ -39,8 +39,39 @@ final class AiActionsExecutor
                 return self::draft($ticket, $staff, (string) ($input['text'] ?? ''));
             case 'create_subticket':
                 return self::subticket($ticket, $staff, (string) ($input['subject'] ?? ''), (string) ($input['message'] ?? ''));
+            case 'send_reply':
+                return self::reply($ticket, $staff, (string) ($input['text'] ?? ''));
+        }
+        if (strpos($action, 'x_') === 0) {
+            return AiActionsExtensions::run($action, $input, $ticket, $staff);
         }
         return self::fail('rejected');
+    }
+
+    /**
+     * The reply form with its defaults: to the owner and active
+     * collaborators, the agent's signature if they have one, no status
+     * change, no auto-claim. Sending must still be allowed in the settings
+     * when the plan runs.
+     */
+    private static function reply($ticket, $staff, string $text): array
+    {
+        if (!AiActionsController::settings()['allow_send']) {
+            return self::fail('send_off');
+        }
+        if (!$ticket->checkStaffPerm($staff, Ticket::PERM_REPLY)) {
+            return self::fail('forbidden');
+        }
+        $errors = array();
+        $vars = array(
+            'response'  => self::html($text),
+            'reply-to'  => 'all',
+            'signature' => $staff->getSignature() ? 'mine' : 'none',
+            'poster'    => $staff,
+            'staffId'   => (int) $staff->getId(),
+        );
+        $sent = $ticket->postReply($vars, $errors, true, false);
+        return $sent ? array('ok' => true) : self::fail('rejected', $errors);
     }
 
     /** "Post Internal Note" in the ticket view: any agent who can see the ticket. */

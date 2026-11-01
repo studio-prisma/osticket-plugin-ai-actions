@@ -75,7 +75,7 @@ test('stored key: something that isn\'t a key is refused, nothing changes', asyn
   await openSettings(page);
   await field(page, 'API key').locator('input[type="password"]').fill('hunter2-not-a-key');
   await save(page);
-  await expect(page.locator('body')).toContainText('doesn\'t look like an Anthropic API key');
+  await expect(page.locator('body')).toContainText('doesn\'t look like an API key of Anthropic');
   expect(stored('key_stored')).toBe(cipher);
 });
 

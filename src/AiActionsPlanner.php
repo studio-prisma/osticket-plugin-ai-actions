@@ -23,10 +23,19 @@ final class AiActionsPlanner
     /** @var array|null see AiActionsChoices; null = format checks only */
     private $choices;
 
-    public function __construct(AiActionsLlm $llm, ?array $choices = null)
+    /** @var bool the send_reply tool is offered */
+    private $send;
+
+    /** @var callable|null fn(string $tool, array $input): string|array, runs read tools */
+    private $reader;
+
+    public function __construct(AiActionsLlm $llm, ?array $choices = null, ?callable $reader = null)
     {
         $this->llm = $llm;
         $this->choices = $choices;
+        $this->reader = $reader;
+        // Offered only where the agent may send: setting on, PERM_REPLY (see AiActionsChoices).
+        $this->send = isset($choices['send_reply']);
     }
 
     /**
@@ -48,7 +57,10 @@ final class AiActionsPlanner
      */
     public function turn(string $system, array $history, array $userBlocks): array
     {
-        $tools = AiActionsTools::definitions();
+        $tools = array_merge(AiActionsTools::definitions($this->send), AiActionsExtensions::definitions());
+        if ($this->reader) {
+            $tools = array_merge(AiActionsReaders::definitions(), $tools);
+        }
         $messages = self::appendUser($history, $userBlocks);
         $changes = array();
         $rejected = 0;
@@ -166,7 +178,16 @@ final class AiActionsPlanner
     {
         $name = (string) ($block['name'] ?? '');
         $id = (string) ($block['id'] ?? '');
-        if (!AiActionsTools::isWrite($name)) {
+        if ($this->reader && in_array($name, AiActionsReaders::NAMES, true)) {
+            $input = $block['input'] ?? null;
+            if (!is_array($input) || count($input) !== 1 || !is_string(reset($input))) {
+                return self::result($id, 'Invalid input.', true);
+            }
+            $r = self::result($id, '', false);
+            $r['content'] = call_user_func($this->reader, $name, $input);
+            return $r;
+        }
+        if (!AiActionsTools::isWrite($name) || ($name === 'send_reply' && !$this->send)) {
             $rejected++;
             return self::result($id, 'Unknown tool.', true);
         }

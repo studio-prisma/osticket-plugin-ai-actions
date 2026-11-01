@@ -60,7 +60,7 @@ final class AiActionsClaude implements AiActionsLlm
             'model'         => $this->model,
             'max_tokens'    => self::MAX_TOKENS,
             'system'        => $system,
-            'messages'      => $messages,
+            'messages'      => self::own($messages),
             'output_config' => array('effort' => $this->effort),
             'fallbacks'     => 'default',
         );
@@ -68,6 +68,28 @@ final class AiActionsClaude implements AiActionsLlm
             $body['tools'] = $tools;
         }
         return $body;
+    }
+
+    /**
+     * The conversation without blocks another provider left in it (OpenAI's
+     * reasoning items) — after the admin switched the model. Unchanged
+     * otherwise, so thinking blocks stay byte for byte. Public for the unit tests.
+     */
+    public static function own(array $messages): array
+    {
+        foreach ($messages as &$m) {
+            if (!is_array($m['content'] ?? null)) {
+                continue;
+            }
+            $kept = array_values(array_filter($m['content'], static function ($b) {
+                return ($b['type'] ?? '') !== 'x_openai';
+            }));
+            if (count($kept) !== count($m['content'])) {
+                $m['content'] = $kept ?: array(array('type' => 'text', 'text' => '…'));
+            }
+        }
+        unset($m);
+        return $messages;
     }
 
     public function send(string $system, array $messages, array $tools): array

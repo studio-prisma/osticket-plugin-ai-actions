@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-01
+
+### Added
+
+- OpenAI (GPT-6.1 Sol, GPT-6.1 Terra, Responses API with `store: false`) and Mistral (Large, Medium, EU) next to Claude. The model setting picks the provider; the key source works the same, with `OPENAI_API_KEY` and `MISTRAL_API_KEY` as environment variables and a key format check per provider.
+- Sending a reply to the customer: preview with the full text and the recipients (owner and active collaborators, as the reply form), sent only after Run, not undoable. Setting "Allow sending replies", off by default.
+- Read tools the model uses during its turn: the parent ticket or a sub-ticket the agent may open, and attachments of the ticket (text files as text; PDFs and images with Claude models). Attachments are listed in the ticket facts.
+- Extension point for other plugins: the signal `ai-actions.tools` adds actions that go through the same preview, Run and note (docs/EXTENSIONS.md).
+
+### Changed
+
+- Default model is Claude Sonnet 5.5.
+
 ## [0.2.0] - 2026-11-01
 
 ### Added
@@ -59,6 +72,7 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/tag/v0.1.0

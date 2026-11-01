@@ -29,11 +29,27 @@ final class AiActionsChoices
             $out['assign_agent'] = self::assignees($ticket, 'agents');
             $out['assign_team'] = self::assignees($ticket, 'teams');
         }
+        // Who a sent reply reaches, exactly as the reply form's default ("all").
+        if (AiActionsController::settings()['allow_send'] && $ticket->checkStaffPerm($staff, Ticket::PERM_REPLY)) {
+            $out['send_reply'] = array(array('value' => 'recipients', 'label' => self::recipients($ticket)));
+        }
         if ($ticket->checkStaffPerm($staff, Ticket::PERM_TRANSFER)) {
             $field = $ticket->getTransferForm()->getField('dept');
             $out['transfer'] = $field ? self::options($field->getChoices(), (string) $ticket->getDeptId()) : array();
         }
         return array_filter($out);
+    }
+
+    /** "To: Name <mail>; Cc: …" for the preview. Public for the controller. */
+    public static function recipients($ticket): string
+    {
+        $owner = $ticket->getOwner();
+        $line = 'To: ' . ($owner ? trim($owner->getName() . ' <' . $owner->getEmail() . '>') : '?');
+        $cc = array();
+        foreach ((array) ($ticket->getActiveCollaborators() ?: array()) as $c) {
+            $cc[] = trim($c->getName() . ' <' . $c->getEmail() . '>');
+        }
+        return $cc ? $line . '; Cc: ' . implode(', ', $cc) : $line;
     }
 
     private static function statuses($ticket): array
