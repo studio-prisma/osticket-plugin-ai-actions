@@ -187,7 +187,9 @@ $roles = array();
 foreach (array('All Access', 'Expanded Access') as $name) {
     $roles[(int) scalar(sprintf("SELECT id FROM %s WHERE name=%s", ROLE_TABLE, db_input($name)))] = $name;
 }
-foreach (array('enabled' => '1', 'roles' => json_encode($roles)) as $k => $v) {
+// The key file is mounted by dev/local/compose.override.yml when a live test
+// needs it; without it the plugin reports "not set up".
+foreach (array('enabled' => '1', 'roles' => json_encode($roles), 'key_file' => '/run/secrets/anthropic.key') as $k => $v) {
     q(sprintf("INSERT INTO %s (namespace, `key`, value, updated) VALUES ('%s', '%s', %s, NOW())",
         CONFIG_TABLE, $ns, $k, db_input($v)));
 }

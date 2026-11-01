@@ -46,7 +46,12 @@ final class AiActionsFakeLlm implements AiActionsLlm
             ), 'usage' => $usage);
         }
 
-        $prompt = is_string($last['content'] ?? null) ? $last['content'] : '';
+        $prompt = '';
+        foreach ((array) ($last['content'] ?? array()) as $block) {
+            if (($block['type'] ?? '') === 'text' && strpos((string) $block['text'], '<agent_request>') === 0) {
+                $prompt = (string) $block['text'];
+            }
+        }
         if (preg_match('/\b(due|fällig)/iu', $prompt)) {
             $tomorrow = (new DateTime($this->today))->modify('+1 day')->format('Y-m-d');
             return array('stop' => 'tool_use', 'content' => array(

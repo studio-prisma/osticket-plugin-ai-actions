@@ -39,6 +39,8 @@ final class AiActionsI18n
                 'not_open'        => 'Ticket ist geschlossen',
                 'rejected'        => 'von osTicket abgelehnt',
                 'csrf'            => 'Sitzung abgelaufen, bitte die Seite neu laden.',
+                'unavailable'     => 'Die AI ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen.',
+                'refused'         => 'Die AI hat die Anfrage abgelehnt.',
             ),
         ) : array(
             'title'        => 'AI action',
@@ -67,6 +69,8 @@ final class AiActionsI18n
                 'not_open'        => 'ticket is closed',
                 'rejected'        => 'rejected by osTicket',
                 'csrf'            => 'Session expired, please reload the page.',
+                'unavailable'     => 'The AI is not reachable right now. Please try again in a moment.',
+                'refused'         => 'The AI declined the request.',
             ),
         );
     }

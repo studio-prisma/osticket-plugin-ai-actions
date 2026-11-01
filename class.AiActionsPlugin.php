@@ -26,6 +26,9 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/src/AiActionsI18n.php';
 require_once __DIR__ . '/src/AiActionsTools.php';
 require_once __DIR__ . '/src/AiActionsLlm.php';
+require_once __DIR__ . '/src/AiActionsKey.php';
+require_once __DIR__ . '/src/AiActionsClaude.php';
+require_once __DIR__ . '/src/AiActionsContext.php';
 require_once __DIR__ . '/src/AiActionsPlanner.php';
 require_once __DIR__ . '/src/AiActionsRunStore.php';
 require_once __DIR__ . '/src/AiActionsExecutor.php';
@@ -63,8 +66,11 @@ class AiActionsPlugin extends Plugin
             return;
         }
         AiActionsController::configure(array(
-            'enabled' => $config->get('enabled'),
-            'roles'   => $config->get('roles'),
+            'enabled'  => $config->get('enabled'),
+            'roles'    => $config->get('roles'),
+            'model'    => $config->get('model'),
+            'effort'   => $config->get('effort'),
+            'key_file' => $config->get('key_file'),
         ));
         if (!AiActionsController::settings()['enabled']) {
             return;

@@ -43,6 +43,39 @@ class AiActionsConfig extends PluginConfig
                                  . 'Nothing selected means nobody.',
                 'configuration' => array('multiselect' => true, 'prompt' => 'None'),
             )),
+
+            'sec_api' => new SectionBreakField(array(
+                'label' => 'Claude API',
+            )),
+
+            'key_file' => new TextboxField(array(
+                'label'         => 'API key file',
+                'default'       => '',
+                'hint'          => 'Absolute path to a file that contains only the API key, outside the '
+                                 . 'osTicket directory and readable by the web server. Empty: the '
+                                 . 'ANTHROPIC_API_KEY environment variable is used. The key itself is '
+                                 . 'never stored here.',
+                'configuration' => array('size' => 60, 'length' => 255),
+            )),
+
+            'model' => new ChoiceField(array(
+                'label'   => 'Model',
+                'default' => 'claude-opus-5-5',
+                'choices' => array(
+                    'claude-opus-5-5'   => 'Claude Opus 5.5',
+                    'claude-sonnet-5-5' => 'Claude Sonnet 5.5 (cheaper)',
+                ),
+            )),
+
+            'effort' => new ChoiceField(array(
+                'label'   => 'Effort',
+                'default' => 'low',
+                'choices' => array(
+                    'low'    => 'Low (fast, cheapest; enough for most requests)',
+                    'medium' => 'Medium',
+                    'high'   => 'High (slow, for long or tangled threads)',
+                ),
+            )),
         );
     }
 

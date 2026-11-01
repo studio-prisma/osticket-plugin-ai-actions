@@ -35,7 +35,8 @@ services:
         condition: service_healthy
     environment:
       # Offline stand-in for the model, see src/AiActionsLlm.php. Never set in production.
-      SPA_AI_FAKE: "1"
+      # SPA_AI_FAKE=0 ./dev/up.sh uses the real API with the key from compose.override.yml.
+      SPA_AI_FAKE: "${SPA_AI_FAKE:-1}"
     ports:
       - "127.0.0.1:${SPA_HTTP_PORT:-8089}:80"
     volumes:

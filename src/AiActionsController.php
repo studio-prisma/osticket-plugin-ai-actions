@@ -18,8 +18,12 @@ final class AiActionsController
 {
     public const PROMPT_MAX = 2000;
 
+    public const MODELS = array('claude-opus-5-5', 'claude-sonnet-5-5');
+    public const EFFORTS = array('low', 'medium', 'high');
+
     /** @var array */
-    private static $settings = array('enabled' => false, 'roles' => array());
+    private static $settings = array('enabled' => false, 'roles' => array(), 'model' => 'claude-opus-5-5',
+                                     'effort' => 'low', 'key_file' => '');
 
     public static function configure(array $raw): void
     {
@@ -34,9 +38,14 @@ final class AiActionsController
     /** Public for the unit tests. */
     public static function normalise(array $raw): array
     {
+        $model = self::keyList($raw['model'] ?? null, '/^claude-[a-z0-9-]+$/');
+        $effort = self::keyList($raw['effort'] ?? null, '/^[a-z]+$/');
         return array(
-            'enabled' => !empty($raw['enabled']),
-            'roles'   => array_map('intval', self::keyList($raw['roles'] ?? null, '/^[1-9]\d{0,9}$/')),
+            'enabled'  => !empty($raw['enabled']),
+            'roles'    => array_map('intval', self::keyList($raw['roles'] ?? null, '/^[1-9]\d{0,9}$/')),
+            'model'    => in_array($model[0] ?? '', self::MODELS, true) ? $model[0] : self::MODELS[0],
+            'effort'   => in_array($effort[0] ?? '', self::EFFORTS, true) ? $effort[0] : 'low',
+            'key_file' => is_string($raw['key_file'] ?? null) ? trim($raw['key_file']) : '',
         );
     }
 
@@ -96,7 +105,14 @@ final class AiActionsController
         }
 
         $t = AiActionsI18n::strings(self::language($thisstaff));
-        $result = (new AiActionsPlanner($llm))->plan(self::context($thisstaff, $ticket), $prompt);
+        try {
+            $result = (new AiActionsPlanner($llm))->plan(self::context($thisstaff, $ticket), $prompt);
+        } catch (AiActionsLlmError $e) {
+            // Status and error type only: the detail never carries the key or the prompt.
+            error_log(sprintf('ai-actions: model call failed (%s) %s', $e->kind, $e->getMessage()));
+            $code = array('auth' => 'not_configured', 'unavailable' => 'unavailable', 'refused' => 'refused')[$e->kind] ?? 'generic';
+            return self::json(422, array('error' => $code));
+        }
 
         $preview = array();
         foreach ($result['changes'] as $c) {
@@ -111,6 +127,7 @@ final class AiActionsController
             'changes'  => $preview,
             'plan_id'  => $planId,
             'rejected' => $result['rejected'],
+            'usage'    => $result['usage'],
         ));
     }
 
@@ -211,15 +228,21 @@ final class AiActionsController
     }
 
     /**
-     * The model client. Slice 1 only knows the offline fake, switched on by
-     * the server environment, never by the request.
+     * The model client. The offline fake is switched on by the server
+     * environment (SPA_AI_FAKE=1), never by the request. Otherwise the
+     * Claude API, if a key is found; null means "not set up".
      */
     private static function llm(): ?AiActionsLlm
     {
         if (getenv('SPA_AI_FAKE') === '1') {
             return new AiActionsFakeLlm(self::now(self::timezone($GLOBALS['thisstaff']))->format('Y-m-d'));
         }
-        return null;
+        $key = AiActionsKey::load(self::$settings['key_file'], defined('ROOT_DIR') ? ROOT_DIR : dirname(INCLUDE_DIR));
+        if ($key['key'] === null) {
+            error_log('ai-actions: no usable API key (' . $key['problem'] . ')');
+            return null;
+        }
+        return new AiActionsClaude($key['key'], self::$settings['model'], self::$settings['effort']);
     }
 
     private static function context($staff, $ticket): array
@@ -230,7 +253,7 @@ final class AiActionsController
             'now'      => $now->format('Y-m-d H:i'),
             'weekday'  => $now->format('l'),
             'timezone' => $tz,
-            'ticket'   => array('number' => (string) $ticket->getNumber()),
+            'data'     => AiActionsContext::data($ticket),
         );
     }
 

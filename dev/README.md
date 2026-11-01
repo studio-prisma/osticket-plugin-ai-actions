@@ -23,6 +23,27 @@ The repository root is mounted read-only as `include/plugins/ai-actions`, so edi
 
 `seed/seed.php` creates one customer, three tickets and two agents besides the installer's admin. The comment at the top of the file lists them. T2 carries a prompt injection in the customer's message: no test may ever see the plugin act on it.
 
+## Offline model and live tests
+
+By default the stack runs with `SPA_AI_FAKE=1`: an offline stand-in that only understands "due date tomorrow" and never calls the network. The end-to-end suite and CI use it.
+
+For a live test against the Claude API, mount a key file through `dev/local/compose.override.yml` and start a fresh stack without the fake:
+
+```yaml
+services:
+  osticket:
+    volumes:
+      - /path/outside/the/repo/anthropic-dev.key:/run/secrets/anthropic.key:ro
+```
+
+```bash
+./dev/down.sh && SPA_AI_FAKE=0 ./dev/up.sh
+```
+
+The seed points the plugin at `/run/secrets/anthropic.key`. Without the mount, the field answers "not set up". Switching between fake and live needs `down.sh` first: a recreated osTicket container loses its installation.
+
+Use a key from a separate workspace with a low spend limit. Never put the key into the repository or into `dev/local/credentials.env`.
+
 ## Mounting other plugins
 
 Create `dev/local/compose.override.yml`. `up.sh` picks it up automatically. Relative paths resolve against `dev/`:
