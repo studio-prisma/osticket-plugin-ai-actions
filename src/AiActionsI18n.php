@@ -46,6 +46,9 @@ final class AiActionsI18n
                 'assign_team'  => 'Team',
                 'transfer'     => 'Abteilung',
                 'set_status'   => 'Status',
+                'add_internal_note' => 'Interne Notiz',
+                'draft_reply'  => 'Antwortentwurf',
+                'create_subticket' => 'Unter-Ticket',
             ),
             'weekday'      => array('So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'),
             'note_title'   => 'AI-Aktion',
@@ -71,6 +74,7 @@ final class AiActionsI18n
                 'conversation_full' => 'Dieses Gespräch ist voll. Mit „Neu“ beginnst du ein frisches.',
                 'not_found'         => 'Ticket nicht gefunden oder kein Zugriff.',
                 'undo_expired'      => 'Zu spät: Rückgängig geht nur kurz nach dem Ausführen.',
+                'draft_exists'      => 'es gibt schon einen Antwortentwurf, erst senden oder löschen',
             ),
         ) : array(
             'title'        => 'AI assistant',
@@ -106,6 +110,9 @@ final class AiActionsI18n
                 'assign_team'  => 'Team',
                 'transfer'     => 'Department',
                 'set_status'   => 'Status',
+                'add_internal_note' => 'Internal note',
+                'draft_reply'  => 'Reply draft',
+                'create_subticket' => 'Sub-ticket',
             ),
             'weekday'      => array('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'),
             'note_title'   => 'AI action',
@@ -131,6 +138,7 @@ final class AiActionsI18n
                 'conversation_full' => 'This conversation is full. "New" starts a fresh one.',
                 'not_found'         => 'Ticket not found or no access.',
                 'undo_expired'      => 'Too late: undo works only shortly after running.',
+                'draft_exists'      => 'a reply draft already exists, send or delete it first',
             ),
         );
     }

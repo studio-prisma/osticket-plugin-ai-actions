@@ -33,8 +33,90 @@ final class AiActionsExecutor
                 return self::transfer($ticket, $staff, $value);
             case 'set_status':
                 return self::status($ticket, $staff, $value, $assignedInRun);
+            case 'add_internal_note':
+                return self::note($ticket, $staff, (string) ($input['text'] ?? ''));
+            case 'draft_reply':
+                return self::draft($ticket, $staff, (string) ($input['text'] ?? ''));
+            case 'create_subticket':
+                return self::subticket($ticket, $staff, (string) ($input['subject'] ?? ''), (string) ($input['message'] ?? ''));
         }
         return self::fail('rejected');
+    }
+
+    /** "Post Internal Note" in the ticket view: any agent who can see the ticket. */
+    private static function note($ticket, $staff, string $text): array
+    {
+        if (!$ticket->checkStaffPerm($staff)) {
+            return self::fail('forbidden');
+        }
+        $errors = array();
+        $note = $ticket->postNote(array('title' => '', 'note' => new TextThreadEntryBody($text)), $errors, $staff);
+        return $note ? array('ok' => true) : self::fail('rejected', $errors);
+    }
+
+    /**
+     * A draft in the agent's own reply field (namespace ticket.response.<id>,
+     * the one the ticket view loads). Never sent from here. An existing
+     * draft is kept: it may hold the agent's own unsent work.
+     */
+    private static function draft($ticket, $staff, string $text): array
+    {
+        if (!$ticket->checkStaffPerm($staff, Ticket::PERM_REPLY)) {
+            return self::fail('forbidden');
+        }
+        $namespace = 'ticket.response.' . $ticket->getId();
+        if (Draft::lookupByNamespaceAndStaff($namespace, $staff->getId())) {
+            return self::fail('draft_exists');
+        }
+        $draft = Draft::create(array('namespace' => $namespace, 'body' => self::html($text)));
+        if ((int) $draft->staff_id !== (int) $staff->getId() || !$draft->save()) {
+            return self::fail('rejected');
+        }
+        return array('ok' => true);
+    }
+
+    /** Plain text as the reply editor's HTML: escaped, paragraphs and line breaks kept. */
+    public static function html(string $text): string
+    {
+        $out = array();
+        foreach (preg_split('/\n{2,}/', trim($text)) as $para) {
+            $out[] = '<p>' . str_replace("\n", '<br>', htmlspecialchars($para, ENT_QUOTES, 'UTF-8')) . '</p>';
+        }
+        return implode('', $out);
+    }
+
+    /**
+     * A new ticket for the same customer and department, linked by
+     * ticket_pid (how sub-ticket plugins and the Ticket Board read it).
+     * Created with origin "staff" like the agent's own "New Ticket", which
+     * needs a help topic: the parent's, else the default, else the first.
+     */
+    private static function subticket($ticket, $staff, string $subject, string $message): array
+    {
+        global $cfg;
+
+        $role = $ticket->getRole($staff);
+        if (!$role || !$role->hasPerm(Ticket::PERM_CREATE)) {
+            return self::fail('forbidden');
+        }
+        $topics = Topic::getHelpTopics(false, false) ?: array();
+        $topic = (int) ($ticket->getTopicId() ?: ($cfg ? $cfg->getDefaultTopicId() : 0) ?: key($topics));
+        $errors = array();
+        $child = Ticket::create(array(
+            'uid'     => $ticket->getOwnerId(),
+            'deptId'  => $ticket->getDeptId(),
+            'topicId' => $topic,
+            'subject' => $subject,
+            'message' => $message,
+            'source'  => 'Other',
+            'ip'      => (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+        ), $errors, 'staff', false, false);
+        if (!$child) {
+            return self::fail('rejected', $errors);
+        }
+        $child->ticket_pid = $ticket->getId();
+        $child->save();
+        return array('ok' => true, 'created' => (string) $child->getNumber());
     }
 
     /**

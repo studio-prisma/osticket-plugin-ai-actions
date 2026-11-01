@@ -273,6 +273,14 @@
   padding: 3px 0;
 }
 
+/* Notes, drafts and sub-tickets show their full text before they run. */
+.spa-ai-plan-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 .spa-ai-plan-label {
   font-weight: 600;
 }

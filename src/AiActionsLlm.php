@@ -24,6 +24,9 @@ interface AiActionsLlm
  *   "close" / "schließ"           status "Closed"
  *   "priority high" / "hoch"      priority "High"
  *   "sales"                       transfer to the Sales department
+ *   "note" / "notiz"             an internal note
+ *   "draft" / "entwurf"          a reply draft (with markup, to prove it is escaped)
+ *   "sub-ticket" / "unterticket" a sub-ticket
  * Everything else gets a fixed answer.
  *
  * Only used when the server environment sets SPA_AI_FAKE=1 (the local test
@@ -88,6 +91,15 @@ final class AiActionsFakeLlm implements AiActionsLlm
             array('/\b(priority high|hoch)/iu', 'set_priority', 'priority', '/^High/i'),
             array('/\bsales\b/iu', 'transfer', 'department', '/^Sales/i'),
         );
+        if (preg_match('/\b(note|notiz)/iu', $prompt)) {
+            $calls[] = array('add_internal_note', array('text' => 'Fake note: customer called back.'));
+        }
+        if (preg_match('/\b(draft|entwurf)/iu', $prompt)) {
+            $calls[] = array('draft_reply', array('text' => "Hello,\n\nthanks for your message. <b>We are on it.</b>\n\nBest regards"));
+        }
+        if (preg_match('/\b(sub-?ticket|unterticket)/iu', $prompt)) {
+            $calls[] = array('create_subticket', array('subject' => 'Fake sub-ticket', 'message' => 'Split off from the parent.'));
+        }
         foreach ($wants as $w) {
             if (preg_match($w[0], $prompt) && ($value = self::option($options, $w[1], $w[3])) !== null) {
                 $calls[] = array($w[1], array($w[2] => $value));

@@ -184,7 +184,8 @@
       var r = results[i];
       var li = el('li', r ? (r.ok ? 'spa-ai-ok' : 'spa-ai-fail') : 'spa-ai-change');
       li.appendChild(el('span', 'spa-ai-plan-label', c.label));
-      li.appendChild(el('span', 'spa-ai-plan-value', c.value));
+      // After a run the result's value, e.g. with the new sub-ticket's number.
+      li.appendChild(el('span', 'spa-ai-plan-value', r && r.value ? r.value : c.value));
       if (r && !r.ok) {
         li.appendChild(el('span', 'spa-ai-plan-why', t.failed + ': ' + errorText(r.error) + (r.message ? ' (' + r.message + ')' : '')));
       }

@@ -446,6 +446,32 @@ check('undo: note lists what was put back', strpos(AiActionsController::undoNote
     array(array('label' => 'Status', 'value' => 'Closed', 'ok' => true)), AiActionsI18n::strings('de')),
     "Anfrage: close it\n\nZurückgesetzt:\n- Status: Closed (erledigt)") === 0);
 
+// ------------------------------------------------------- notes, drafts, sub
+
+check('text: note trimmed', AiActionsTools::validate('add_internal_note', array('text' => "  hi\r\nthere ")) === array('text' => "hi\nthere"));
+check('text: empty and too long refused', AiActionsTools::validate('add_internal_note', array('text' => '  ')) === null
+    && AiActionsTools::validate('add_internal_note', array('text' => str_repeat('a', 5001))) === null
+    && AiActionsTools::validate('draft_reply', array('text' => str_repeat('a', 10000))) !== null);
+check('text: control characters refused', AiActionsTools::validate('add_internal_note', array('text' => "a\x00b")) === null);
+check('text: extra keys refused', AiActionsTools::validate('draft_reply', array('text' => 'x', 'send' => true)) === null);
+check('text: sub-ticket in either key order',
+    AiActionsTools::validate('create_subticket', array('message' => 'm', 'subject' => 's')) === array('subject' => 's', 'message' => 'm'));
+check('text: sub-ticket subject on one line, both parts required',
+    AiActionsTools::validate('create_subticket', array('subject' => "a\nb", 'message' => 'm')) === null
+    && AiActionsTools::validate('create_subticket', array('subject' => 's')) === null);
+$tde = AiActionsI18n::strings('de');
+check('text: preview shows the full text', AiActionsTools::summary('draft_reply', array('text' => "Hallo\nWelt"), $tde)
+    === array('label' => 'Antwortentwurf', 'value' => "Hallo\nWelt")
+    && AiActionsTools::summary('create_subticket', array('subject' => 'S', 'message' => 'M'), $tde)['value'] === "S\nM");
+check('text: draft HTML escapes markup, keeps paragraphs and line breaks',
+    AiActionsExecutor::html("Hi <b>x</b> & \"y\"\nline 2\n\n\nnext") === '<p>Hi &lt;b&gt;x&lt;/b&gt; &amp; &quot;y&quot;<br>line 2</p><p>next</p>');
+check('text: notes, drafts and sub-tickets are not undoable', AiActionsTools::NO_UNDO === array('add_internal_note', 'draft_reply', 'create_subticket'));
+$ordered = AiActionsTools::inRunOrder(array(
+    array('action' => 'set_status', 'input' => array()), array('action' => 'add_internal_note', 'input' => array()),
+    array('action' => 'transfer', 'input' => array()), array('action' => 'set_due_date', 'input' => array()),
+));
+check('text: notes run before transfer and status', array_column($ordered, 'action') === array('set_due_date', 'add_internal_note', 'transfer', 'set_status'));
+
 // ------------------------------------------------------------------- store
 
 check('store: id format', AiActionsRunStore::isId(str_repeat('a1', 16)) && !AiActionsRunStore::isId("' OR 1=1 --")

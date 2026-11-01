@@ -14,10 +14,22 @@ final class AiActionsTools
 {
     /**
      * Tools that change the ticket, in the order they run: fields first,
-     * status last (a closed ticket can't be assigned any more), transfer
-     * just before it (it can take away the agent's access).
+     * then notes, drafts and sub-tickets, status last (a closed ticket can't
+     * be assigned any more), transfer just before it (it can take away the
+     * agent's access).
      */
-    public const WRITE = array('set_due_date', 'set_priority', 'assign_agent', 'assign_team', 'transfer', 'set_status');
+    public const WRITE = array('set_due_date', 'set_priority', 'assign_agent', 'assign_team',
+        'add_internal_note', 'draft_reply', 'create_subticket', 'transfer', 'set_status');
+
+    /** Changes undo can't take back (spec: notes, drafts, sub-tickets). */
+    public const NO_UNDO = array('add_internal_note', 'draft_reply', 'create_subticket');
+
+    /** Text tools: input key => [min, max] characters. */
+    private const TEXT = array(
+        'add_internal_note' => array('text' => array(1, 5000)),
+        'draft_reply'       => array('text' => array(1, 10000)),
+        'create_subticket'  => array('subject' => array(1, 120), 'message' => array(1, 5000)),
+    );
 
     /** Tool => input key holding a value from AiActionsChoices. */
     private const CHOICE_KEY = array(
@@ -60,7 +72,33 @@ final class AiActionsTools
                 ),
             );
         };
-        return array(
+        $text = static function (string $name, string $what, array $fields): array {
+            $props = array();
+            foreach ($fields as $key => $desc) {
+                $props[$key] = array('type' => 'string', 'description' => $desc);
+            }
+            return array(
+                'name'         => $name,
+                'description'  => "Plan to $what. The agent sees the full text in the preview and decides. "
+                                . 'Write it in the language of the agent\'s request, as plain text.',
+                'strict'       => true,
+                'input_schema' => array(
+                    'type'                 => 'object',
+                    'properties'           => $props,
+                    'required'             => array_keys($fields),
+                    'additionalProperties' => false,
+                ),
+            );
+        };
+        $defs = array(
+            $text('add_internal_note', 'add an internal note (only agents see it)',
+                array('text' => 'The note, up to 5000 characters.')),
+            $text('draft_reply', 'prepare a reply to the customer as a draft in the agent\'s reply field. '
+                . 'It is never sent by you; the agent edits and sends it', array('text' => 'The reply, up to 10000 characters.')),
+            $text('create_subticket', 'create a sub-ticket of this ticket for the same customer and department',
+                array('subject' => 'Subject, up to 120 characters.', 'message' => 'First message of the sub-ticket, up to 5000 characters.')),
+        );
+        $all = array_merge($defs, array(
             array(
                 'name'         => 'set_due_date',
                 'description'  => 'Plan a new due date for the current ticket. The change only happens '
@@ -84,7 +122,17 @@ final class AiActionsTools
             $choice('assign_team', 'team', 'assign the ticket to a team'),
             $choice('transfer', 'department', 'transfer the ticket to another department'),
             $choice('set_status', 'status', 'change the ticket\'s status, e.g. to close or resolve it'),
-        );
+        ));
+        // In run order, so the list reads the way changes happen.
+        usort($all, static function ($a, $b) {
+            return array_search($a['name'], self::WRITE, true) <=> array_search($b['name'], self::WRITE, true);
+        });
+        return $all;
+    }
+
+    public static function isText(string $name): bool
+    {
+        return isset(self::TEXT[$name]);
     }
 
     public static function isWrite(string $name): bool
@@ -112,6 +160,24 @@ final class AiActionsTools
             $due = self::localDateTime($input['due']);
             return $due === null ? null : array('due' => $due);
         }
+        if (isset(self::TEXT[$name])) {
+            $out = array();
+            $given = array_keys($input);
+            $wanted = array_keys(self::TEXT[$name]);
+            sort($given);
+            sort($wanted);
+            if ($given !== $wanted) {
+                return null;
+            }
+            foreach (self::TEXT[$name] as $key => $bounds) {
+                $v = self::text($input[$key], $bounds[0], $bounds[1]);
+                if ($v === null || ($key === 'subject' && strpos($v, "\n") !== false)) {
+                    return null;
+                }
+                $out[$key] = $v;
+            }
+            return $out;
+        }
         $key = self::CHOICE_KEY[$name] ?? null;
         if ($key === null || array_keys($input) !== array($key) || !is_string($input[$key])) {
             return null;
@@ -124,6 +190,20 @@ final class AiActionsTools
             return null;
         }
         return array($key => $value);
+    }
+
+    /** Trimmed UTF-8 text without control characters, within bounds; else null. */
+    private static function text($raw, int $min, int $max): ?string
+    {
+        if (!is_string($raw)) {
+            return null;
+        }
+        $s = trim(str_replace("\r\n", "\n", $raw));
+        if (!preg_match('//u', $s) || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $s)) {
+            return null;
+        }
+        $len = (int) preg_match_all('/./su', $s);
+        return $len >= $min && $len <= $max ? $s : null;
     }
 
     /** "YYYY-MM-DD HH:MM" if it is a real calendar date and time, else null. */
@@ -160,6 +240,12 @@ final class AiActionsTools
                 'label' => $t['due_date'],
                 'value' => $d ? $d->format('Y-m-d H:i') . ' (' . $t['weekday'][(int) $d->format('w')] . ')' : $input['due'],
             );
+        }
+        if ($name === 'create_subticket') {
+            return array('label' => $t['labels'][$name], 'value' => $input['subject'] . "\n" . $input['message']);
+        }
+        if (isset(self::TEXT[$name])) {
+            return array('label' => $t['labels'][$name], 'value' => $input['text']);
         }
         $value = (string) self::choiceValue($name, $input);
         return array(

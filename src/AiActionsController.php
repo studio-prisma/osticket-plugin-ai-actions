@@ -212,6 +212,9 @@ final class AiActionsController
                 ? AiActionsExecutor::run($ticket, $thisstaff, $c['action'], $input, $assigned)
                 : array('ok' => false, 'error' => 'rejected');
             $assigned = $assigned || ($r['ok'] && in_array($c['action'], array('assign_agent', 'assign_team'), true));
+            if (!empty($r['created'])) {
+                $line['value'] .= "\n→ #" . $r['created'];
+            }
             $results[] = $line + array(
                 'ok'        => $r['ok'],
                 'error'     => $r['error'] ?? null,
@@ -233,7 +236,7 @@ final class AiActionsController
             'note'  => new TextThreadEntryBody(self::noteBody($run['prompt'], $public, $t)),
         ), $errors, $thisstaff);
         $undoable = (bool) array_filter($results, function ($r) {
-            return $r['ok'] && !$r['unchanged'];
+            return $r['ok'] && !$r['unchanged'] && !in_array($r['action'], AiActionsTools::NO_UNDO, true);
         });
         AiActionsChatStore::planOutcome($staffId, (int) $ticket->getId(), $run['id'], 'done', $public,
             $undoable ? array('undo_until' => time() + AiActionsRunStore::UNDO_WINDOW) : array());
@@ -264,7 +267,8 @@ final class AiActionsController
         $t = AiActionsI18n::strings(self::language($thisstaff));
         $undone = array();
         foreach (array_reverse($run['results']) as $r) {
-            if (empty($r['ok']) || !empty($r['unchanged']) || empty($r['action'])) {
+            if (empty($r['ok']) || !empty($r['unchanged']) || empty($r['action'])
+                    || in_array($r['action'], AiActionsTools::NO_UNDO, true)) {
                 continue;
             }
             $u = AiActionsExecutor::undo($ticket, $thisstaff, (string) $r['action'], $r['previous'] ?? null);
