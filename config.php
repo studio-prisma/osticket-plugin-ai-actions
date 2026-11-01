@@ -68,7 +68,7 @@ class AiActionsConfig extends PluginConfig
                 'default'       => '',
                 'hint'          => 'For "Key file": absolute path to a file that contains only the API key, '
                                  . 'outside the osTicket directory and readable by the web server. On Plesk: '
-                                 . '/var/www/vhosts/<domain>/private/anthropic.key',
+                                 . '/var/www/vhosts/example.com/private/anthropic.key (your domain instead of example.com)',
                 'configuration' => array('size' => 60, 'length' => 255),
             )),
 
