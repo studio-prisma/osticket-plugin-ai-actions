@@ -51,7 +51,7 @@ require_once __DIR__ . '/src/AiActionsAutomation.php';
 class AiActionsPlugin extends Plugin
 {
     /** Mirrors plugin.php; used for cache-busting the asset URLs only. */
-    public const VERSION = '0.3.0';
+    public const VERSION = '0.4.0';
 
     /** Route base, relative to ROOT_PATH. */
     public const STAFF_BASE = 'scp/ajax.php/ai';

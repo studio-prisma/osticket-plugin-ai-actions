@@ -86,6 +86,9 @@ final class AiActionsAutomation
     public static function work(array $job): array
     {
         self::ensure();
+        if (($job['kind'] ?? '') !== 'rule') {
+            return array('ok' => false, 'error' => 'unknown_kind');
+        }
         $rule = AiActionsRules::get((int) $job['rule_id']);
         if (!$rule || !$rule['active']) {
             return array('ok' => true, 'error' => 'rule_off');
@@ -136,7 +139,7 @@ final class AiActionsAutomation
 
     private static function runAuto(array $rule, $ticket, $agent, array $plan): void
     {
-        $t = AiActionsI18n::strings('en');
+        $t = AiActionsI18n::strings(AiActionsController::language($agent));
         $results = array();
         $guard = array();
         $sent = false;

@@ -135,7 +135,7 @@ test('the chat follows PJAX navigation between tickets', async ({ page }) => {
   await page.goto('/scp/tickets.php');
   const chat = await openChat(page);
   await expect(chat.locator('.spa-ai-hint')).toBeVisible();
-  await page.locator(`a[href*="tickets.php?id=${T1}"]`).first().click();
+  await page.locator(`a[href$="tickets.php?id=${T1}"]`).first().click();
   await expect(page.locator('#ticketThread')).toBeVisible();
   await expect(chat.locator('.spa-ai-subtitle')).toContainText(`#${seed.numbers.T1}`);
   await expect(page.locator('#spa-ai-launcher')).toHaveCount(1);

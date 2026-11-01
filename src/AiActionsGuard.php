@@ -12,7 +12,7 @@ declare(strict_types=1);
  *      or secrets the customer didn't write, nothing copied from internal
  *      notes, bounded length
  *   2. rate and loop checks: per ticket, per hour, never to automatic mail
- *   3. a reviewer model without tools that sees only the customer's last
+ *   3. a reviewer model without tools that sees only the customer's
  *      message, the reply and the rule's task
  *
  * Reasons are codes, so the log and the note say what failed without
@@ -293,11 +293,19 @@ final class AiActionsGuard
         return $out;
     }
 
+    /**
+     * The customer's messages, oldest first, newest kept when it gets long.
+     * A reply that refers to an earlier message is not "invented".
+     */
     private static function lastMessage($ticket): string
     {
-        $last = $ticket->getThread()->getEntries()->filter(array('type' => 'M'))->order_by('-id')->first();
-        $b = $last ? $last->getBody() : null;
-        return $b ? mb_substr((string) $b->getSearchable(), 0, 8000) : '';
+        $parts = array();
+        foreach ($ticket->getThread()->getEntries()->filter(array('type' => 'M'))->order_by('id') as $m) {
+            $b = $m->getBody();
+            $parts[] = $b ? (string) $b->getSearchable() : '';
+        }
+        $all = implode("\n---\n", $parts);
+        return function_exists('mb_substr') && mb_strlen($all) > 8000 ? mb_substr($all, -8000) : $all;
     }
 
     private static function squash(string $s): string

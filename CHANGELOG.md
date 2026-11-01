@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-01
+
+### Added
+
+- AI agents: osTicket agent accounts the AI works as, assignable like anyone, with their own role, model and persona. Nobody can sign in with them (unknown backend, unknown random password, session ended at once).
+- Rules: trigger (new ticket, assignment to the AI agent, new customer message, schedule), conditions, task, allowed actions and mode (proposal or automatic), with a flow view. Triggers queue jobs; osTicket's cron runs them.
+- Proposals in the ticket chat, run with the rights of the agent who confirms.
+- Automatic runs with the AI agent's role, an internal note each, a log and 24-hour undo.
+- Send guard for automatic replies: fixed checks (links, addresses, secrets, copied internal notes, length), rate and loop limits, a reviewer model, fail closed; held replies become an internal note.
+- AI notice in automatic replies (EU AI Act Art. 50(1)), on by default, text configurable.
+- Admin page `scp/ajax.php/ai/admin` with AI agents, rules, log and cron status. Emergency stop in the settings.
+
+### Fixed
+
+- Collaborators in the reply preview: osTicket returns a query set, which was cast to an array.
+
 ## [0.3.0] - 2026-11-01
 
 ### Added
@@ -72,7 +88,8 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/tag/v0.1.0

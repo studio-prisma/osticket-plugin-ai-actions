@@ -82,7 +82,8 @@ test('AI agent: nobody can sign in, even with a known password', async ({ page }
 test('cron: stamps its run and works through queued jobs once', async ({ page }) => {
   const id = php(`echo AiActionsJobs::enqueue('test', 0, ${T1}, array('x' => 1));`);
   php('AiActionsJobs::cron();');
-  expect(sql(`SELECT state, error FROM ost_ai_actions_job WHERE id=${id}`)).toBe('failed\tno_worker');
+  // Only rule jobs are worked on; anything else fails instead of running.
+  expect(sql(`SELECT state, error FROM ost_ai_actions_job WHERE id=${id}`)).toBe('failed\tunknown_kind');
   php('AiActionsJobs::cron();');
   expect(sql(`SELECT COUNT(*) FROM ost_ai_actions_job WHERE state='running'`)).toBe('0');
 

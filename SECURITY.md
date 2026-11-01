@@ -6,7 +6,7 @@ Only the latest minor release receives security fixes. Older tags are archived, 
 
 | Version | Supported |
 |---|---|
-| `0.3.x` | yes |
+| `0.4.x` | yes |
 | everything older | no |
 
 ## Reporting a Vulnerability
@@ -38,6 +38,9 @@ Expected response: an acknowledgement within 7 days, an assessment within 30. Th
 - **Model or plugin output rendered as markup** in the chat, the preview, notes or drafts.
 - **Path traversal or arbitrary file reads** through the asset route or the key file setting.
 - **Getting past the daily limits** or the one-message-at-a-time lock.
+- **Signing in as an AI agent**, or an AI agent doing more than its role and its rule's allowed actions.
+- **An automatic reply that passes the send guard** with a link outside the allowed domains, an address, number or secret the customer didn't write, text from an internal note, or past the rate and loop limits.
+- **A rule, AI agent or log entry changed by a non-admin**, or a proposal run by an agent who can't open the ticket.
 
 ## Out of Scope
 
@@ -45,6 +48,7 @@ Documented design decisions are not findings.
 
 - **Ticket content goes to the chosen provider** (Anthropic, OpenAI or Mistral), including attachments the model reads. That's what the plugin does. Data processing agreements and privacy notices are the operator's job.
 - **Actions added by other plugins** through `ai-actions.tools` run that plugin's code with the agent; their permission checks are that plugin's responsibility.
+- **The reviewer model can be wrong.** It is the last of several layers; a reply it lets through that breaks none of the fixed checks is a quality issue, not a vulnerability. Automatic sending is the operator's choice per rule.
 - **The model can be wrong, or be talked into a plan.** A bad suggestion that the agent sees in the preview and could reject is not a vulnerability; the preview and the confirmation are the control. A plan the agent confirms runs with the agent's rights.
 - **Prompt injection that only changes the model's answer text** (a misleading summary) without a change, a leak or a hidden preview.
 - **Closing after an assignment in the same plan keeps the new assignee**, unlike osTicket's own close.
