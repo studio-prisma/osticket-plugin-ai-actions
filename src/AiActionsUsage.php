@@ -49,10 +49,15 @@ final class AiActionsUsage
         db_query(sprintf("SELECT RELEASE_LOCK('%s')", self::lockName($staffId)));
     }
 
-    /** Public for the unit tests. */
-    public static function lockName(int $staffId): string
+    /**
+     * MySQL named locks are server-wide: two osTicket installs on one
+     * database server would share "agent 1". Database name and table prefix
+     * make the name per install (max. 64 characters). Public for the tests.
+     */
+    public static function lockName(int $staffId, ?string $install = null): string
     {
-        return 'spa_ai_actions_' . $staffId;
+        $install = $install ?? ((defined('DBNAME') ? DBNAME : '') . '|' . (defined('TABLE_PREFIX') ? TABLE_PREFIX : ''));
+        return 'spa_ai_' . substr(sha1($install), 0, 16) . '_' . $staffId;
     }
 
     /** @return array{requests:int, tokens:int} today's use so far */

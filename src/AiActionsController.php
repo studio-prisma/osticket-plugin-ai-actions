@@ -523,6 +523,7 @@ final class AiActionsController
      */
     private static function json(int $code, array $payload): string
     {
+        header('X-Content-Type-Options: nosniff');
         Http::response($code, (string) json_encode($payload, JSON_UNESCAPED_UNICODE), 'application/json');
         exit;
     }

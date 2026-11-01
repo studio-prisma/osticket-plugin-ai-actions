@@ -9,6 +9,8 @@ const seed = requireSeed();
 const T1 = seed.tickets.T1;
 const NS = `plugin.${seed.plugin.id}.instance.${seed.plugin.instance}`;
 const ADMIN = seed.agents.admin;
+// As AiActionsUsage::lockName(): per install (database name and table prefix of the test stack).
+const LOCK = `spa_ai_${require('crypto').createHash('sha1').update('osticket|ost_').digest('hex').slice(0, 16)}_${ADMIN}`;
 
 function setting(key, value) {
   if (value === null) {
@@ -81,10 +83,10 @@ test('one message at a time per agent', async ({ page }) => {
     'compose', '-p', env.SPA_PROJECT || 'spa-dev', '--env-file', path.join(LOCAL, 'credentials.env'),
     '-f', path.resolve(__dirname, '../../dev/docker-compose.yml'),
     'exec', '-T', 'db', 'mariadb', '-uosticket', `-p${env.SPA_DB_PASSWORD}`, 'osticket', '-N',
-    '-e', `SELECT GET_LOCK('spa_ai_actions_${ADMIN}', 0); SELECT SLEEP(6);`,
+    '-e', `SELECT GET_LOCK('${LOCK}', 0); SELECT SLEEP(6);`,
   ]);
   try {
-    await expect.poll(() => sql(`SELECT IS_USED_LOCK('spa_ai_actions_${ADMIN}') IS NOT NULL`), { timeout: 5000 }).toBe('1');
+    await expect.poll(() => sql(`SELECT IS_USED_LOCK('${LOCK}') IS NOT NULL`), { timeout: 5000 }).toBe('1');
     expect(await aiPost(page, '/plan', { ticket_id: String(T1), prompt: 'What is this about?' }))
       .toEqual({ status: 422, json: { error: 'busy' } });
     expect(sql('SELECT COUNT(*) FROM ost_ai_actions_usage')).toBe('0');
@@ -92,6 +94,6 @@ test('one message at a time per agent', async ({ page }) => {
     holder.kill();
   }
   // Once the other request is over, the next one goes through.
-  await expect.poll(() => sql(`SELECT IS_USED_LOCK('spa_ai_actions_${ADMIN}') IS NULL`), { timeout: 10000 }).toBe('1');
+  await expect.poll(() => sql(`SELECT IS_USED_LOCK('${LOCK}') IS NULL`), { timeout: 10000 }).toBe('1');
   expect((await aiPost(page, '/plan', { ticket_id: String(T1), prompt: 'What is this about?' })).status).toBe(200);
 });

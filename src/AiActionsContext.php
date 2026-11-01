@@ -97,13 +97,20 @@ final class AiActionsContext
         return "<ticket_data>\n" . implode("\n", $lines) . "\n</ticket_data>";
     }
 
+    /**
+     * The block tags the prompt is built from. Text from a ticket must not
+     * contain any of them, so it can neither end its own block nor fake an
+     * agent request, a plan result or the list of allowed values.
+     */
+    public const CONTROL_TAGS = '#<\s*/?\s*(ticket_data|agent_request|plan_result|ticket_options)\b[^>]*>#i';
+
     /** Valid UTF-8, no block tag, bounded length. */
     private static function clean(string $s, int $max): string
     {
         if (!preg_match('//u', $s)) {
             $s = mb_convert_encoding($s, 'UTF-8', 'UTF-8');
         }
-        $s = preg_replace('#</?\s*ticket_data\s*>#i', '[tag removed]', $s) ?? '';
+        $s = preg_replace(self::CONTROL_TAGS, '[tag removed]', $s) ?? '';
         if (self::length($s) > $max) {
             $s = implode('', array_slice(preg_split('//u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: array(), 0, $max)) . ' […]';
         }

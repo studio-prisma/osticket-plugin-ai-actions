@@ -117,6 +117,6 @@ final class AiActionsChoices
     private static function clean(string $s): string
     {
         $s = preg_replace('/[\r\n]+/', ' ', $s) ?? '';
-        return preg_replace('#</?\s*ticket_options\s*>#i', '', $s) ?? '';
+        return preg_replace(AiActionsContext::CONTROL_TAGS, '', $s) ?? '';
     }
 }
