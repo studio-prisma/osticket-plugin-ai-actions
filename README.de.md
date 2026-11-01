@@ -18,6 +18,7 @@ Ein Chat im Agenten-Bereich von osTicket, der Anfragen in Alltagssprache über d
 | Änderungen | Fälligkeit, Priorität, Zuweisung an Agent oder Team, Abteilung, Status, interne Notiz, Antwortentwurf, Unter-Ticket, gesendete Antwort (Einstellung, Standard aus), Aktionen anderer Plugins ([EXTENSIONS](docs/EXTENSIONS.md)) |
 | Lesen | Eltern-Ticket und Unter-Tickets, die der Agent öffnen darf; Anhänge (Textdateien; PDFs und Bilder mit Claude) |
 | Anbieter | Anthropic (Claude Sonnet 5.5, Opus 5.5), OpenAI (GPT-6.1 Sol, Terra), Mistral (Large, Medium; EU) |
+| Verwaltung | Für Admins auf den Admin-Seiten: Textbausteine, Hilfethemen, Listen, SLA, Filter, Abteilungen, Teams, mit Vorher → Nachher und Undo; löscht nie ([ADMIN](docs/ADMIN.md)) |
 | KI-Agenten und Regeln | Agenten-Konten ohne Login, die nach Regeln arbeiten: Triage bei neuen Tickets, Hilfe bei Zuweisung, Antworten auf Kundennachrichten, Nachfassen nach Zeitplan. Als Vorschlag oder automatisch, mit Sendeschutz für Antworten ([RULES](docs/RULES.md)) |
 | Vorschau | Jede geplante Änderung als Zeile mit osTickets eigenen Bezeichnungen, Notizen und Entwürfe mit vollem Text. **Ausführen** oder **Verwerfen** |
 | Rückgängig | 30 Sekunden nach dem Ausführen, für jede Feldänderung (nicht für Notizen, Entwürfe und Unter-Tickets). Danach bleibt der Knopf ausgegraut stehen |

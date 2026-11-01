@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-01
+
+### Added
+
+- Settings chat for admins on admin pages: canned responses, help topics, list items, SLA plans, ticket filters and teams (create, change, disable), departments (change), team members (add, remove). Preview with before → after, Run, undo in the chat and for 24 hours in the log; nothing is ever deleted. Every change goes to osTicket's system log ([ADMIN](docs/ADMIN.md)).
+
+### Changed
+
+- Departments and teams are changed field by field instead of through core's form save, which rebuilds memberships from `members[]`.
+
 ## [0.4.0] - 2026-11-01
 
 ### Added
@@ -88,7 +98,8 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.1.0...v0.2.0

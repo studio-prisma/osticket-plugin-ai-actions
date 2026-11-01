@@ -180,6 +180,8 @@ Erst danach weitere Rollen freigeben.
 
 Den Ordner `include/plugins/ai-actions/` durch das neue Release ersetzen. Einstellungen bleiben in osTickets Konfigurationstabelle, die Key-Datei bleibt, wo sie ist. Vorher das CHANGELOG lesen: Ein Sprung der Hauptversion heißt geändertes Verhalten oder geänderte Einstellungen.
 
+Von 0.4.x auf 0.5.0: Der Verwaltungs-Chat erscheint für Admins auf den Admin-Seiten (docs/ADMIN.md). Keine neuen Einstellungen.
+
 Von 0.3.x auf 0.4.0: KI-Agenten und Regeln sind neu und tun nichts, bis du sie anlegst (docs/RULES.md). Sie brauchen den osTicket-Cron. Neue Einstellungen: Not-Aus, KI-Hinweis, erlaubte Link-Domains, automatische Antworten pro Stunde.
 
 Von 0.2.x auf 0.3.0: neue Einstellung „Allow sending replies“ (aus) und die Modelle der weiteren Anbieter. Standardmodell ist jetzt Claude Sonnet 5.5; eine Instanz behält ihr eingestelltes Modell.

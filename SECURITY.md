@@ -6,7 +6,7 @@ Only the latest minor release receives security fixes. Older tags are archived, 
 
 | Version | Supported |
 |---|---|
-| `0.4.x` | yes |
+| `0.5.x` | yes |
 | everything older | no |
 
 ## Reporting a Vulnerability
@@ -38,6 +38,7 @@ Expected response: an acknowledgement within 7 days, an assessment within 30. Th
 - **Model or plugin output rendered as markup** in the chat, the preview, notes or drafts.
 - **Path traversal or arbitrary file reads** through the asset route or the key file setting.
 - **Getting past the daily limits** or the one-message-at-a-time lock.
+- **The settings chat for a non-admin**, a settings change without Run, a deletion, or a change outside its areas (agents, roles, permissions, email accounts, API keys, plugins, system settings); a department or team losing members it wasn't asked to lose.
 - **Signing in as an AI agent**, or an AI agent doing more than its role and its rule's allowed actions.
 - **An automatic reply that passes the send guard** with a link outside the allowed domains, an address, number or secret the customer didn't write, text from an internal note, or past the rate and loop limits.
 - **A rule, AI agent or log entry changed by a non-admin**, or a proposal run by an agent who can't open the ticket.
