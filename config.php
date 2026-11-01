@@ -55,6 +55,16 @@ class AiActionsConfig extends PluginConfig
                 ),
             )),
 
+            'auto_paused' => new BooleanField(array(
+                'label'         => 'Pause all automatic work',
+                'default'       => false,
+                'configuration' => array(
+                    'desc' => 'Emergency stop for AI agents and rules: nothing runs or is sent automatically, '
+                            . 'queued jobs wait. The chat keeps working. Rules, AI agents and the log: '
+                            . 'scp/ajax.php/ai/admin',
+                ),
+            )),
+
             'sec_api' => new SectionBreakField(array(
                 'label' => 'Claude API',
             )),

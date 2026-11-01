@@ -31,7 +31,7 @@ final class AiActionsController
                                      'effort' => 'low', 'key_source' => 'file', 'key_file' => '', 'daily_requests' => 100,
                                      'daily_tokens' => 500000, 'thread_chars' => 12000, 'history_days' => 90,
                                      'name' => '', 'icon' => 'sparkles', 'image' => '', 'accent' => '', 'welcome' => '',
-                                     'allow_send' => false);
+                                     'allow_send' => false, 'auto_paused' => false);
 
     /** Icons for the bubble and the window header; "image" uses the image setting. */
     public const ICONS = array('sparkles', 'robot', 'chat', 'bulb', 'bolt', 'initial', 'image');
@@ -78,6 +78,7 @@ final class AiActionsController
                 ? strtolower(trim($raw['accent'])) : '',
             'welcome' => self::welcome($raw['welcome'] ?? null),
             'allow_send' => !empty($raw['allow_send']),
+            'auto_paused' => !empty($raw['auto_paused']),
         );
     }
 

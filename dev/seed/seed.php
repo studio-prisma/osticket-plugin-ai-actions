@@ -201,6 +201,8 @@ foreach (array('enabled' => '1', 'roles' => json_encode($roles), 'key_file' => '
 AiActionsRunStore::ensure();
 AiActionsChatStore::ensure();
 AiActionsUsage::ensure();
+AiActionsAgents::ensure();
+AiActionsJobs::ensure();
 
 // The Ticket Board plugin, if dev/local/compose.override.yml mounts it
 // (the chat has to work in its quick view). Not the start page, so the

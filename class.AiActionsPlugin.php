@@ -41,6 +41,9 @@ require_once __DIR__ . '/src/AiActionsUsage.php';
 require_once __DIR__ . '/src/AiActionsExecutor.php';
 require_once __DIR__ . '/src/AiActionsAssets.php';
 require_once __DIR__ . '/src/AiActionsController.php';
+require_once __DIR__ . '/src/AiActionsAgents.php';
+require_once __DIR__ . '/src/AiActionsJobs.php';
+require_once __DIR__ . '/src/AiActionsAdmin.php';
 
 class AiActionsPlugin extends Plugin
 {
@@ -89,6 +92,7 @@ class AiActionsPlugin extends Plugin
             'accent'   => $config->get('accent'),
             'welcome'  => $config->get('welcome'),
             'allow_send' => $config->get('allow_send'),
+            'auto_paused' => $config->get('auto_paused'),
         ), static function () use ($config) {
             // PluginConfig decrypts PasswordField values when it loads.
             $v = $config->get('key_stored');
@@ -98,6 +102,16 @@ class AiActionsPlugin extends Plugin
             return;
         }
         Signal::connect('ajax.scp', array(__CLASS__, 'staffRoutes'));
+        // AI agents: no session for them, ever; their work runs in osTicket's cron.
+        Signal::connect('auth.login.succeeded', static function ($staff) {
+            AiActionsAgents::refuseLogin($staff);
+        });
+        Signal::connect('auth.pwreset.login', static function ($staff) {
+            AiActionsAgents::refuseLogin($staff);
+        });
+        Signal::connect('cron', static function () {
+            AiActionsJobs::cron();
+        });
         AiActionsAssets::watch();
     }
 
@@ -127,6 +141,12 @@ class AiActionsPlugin extends Plugin
         }));
         $dispatcher->append(url_post('^/ai/reset$', static function () {
             return AiActionsController::reset();
+        }));
+        $dispatcher->append(url_get('^/ai/admin$', static function () {
+            return AiActionsAdmin::page();
+        }));
+        $dispatcher->append(url_post('^/ai/admin$', static function () {
+            return AiActionsAdmin::post();
         }));
         $dispatcher->append(url_get('^/ai/assets/([a-z.-]+)$', static function ($name) {
             return AiActionsController::asset($name);
