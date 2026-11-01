@@ -111,6 +111,8 @@ Prüfung: `include/plugins/ai-actions/plugin.php` existiert und ist für den Web
 | Model, Effort | Standard (Claude Opus 5.5, Low) |
 | Messages, Tokens | Standard (100, 500.000) oder für den Test niedriger |
 | Thread length | Standard (12.000) |
+| Name, Icon, Own image, Accent colour, Welcome text | leer lassen geht; setzen, sobald der Chat läuft |
+| Keep earlier conversations (days) | Standard (90), oder 0 für nichts aufbewahren |
 
 4. Instanz als aktiv anhaken. Speichern. In der Plugin-Liste prüfen, dass das Plugin selbst **aktiviert** ist.
 
@@ -177,6 +179,8 @@ Erst danach weitere Rollen freigeben.
 ## Aktualisieren
 
 Den Ordner `include/plugins/ai-actions/` durch das neue Release ersetzen. Einstellungen bleiben in osTickets Konfigurationstabelle, die Key-Datei bleibt, wo sie ist. Vorher das CHANGELOG lesen: Ein Sprung der Hauptversion heißt geändertes Verhalten oder geänderte Einstellungen.
+
+Von 0.1.x auf 0.2.0: Das Plugin legt die Tabelle `ost_ai_actions_chat_archive` beim ersten Aufruf selbst an. Neue Einstellungen starten mit ihren Standards (kein Name, Funkel-Icon, Theme-Farbe, 90 Tage frühere Gespräche).
 
 ## Deinstallieren
 

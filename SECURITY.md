@@ -27,7 +27,7 @@ Expected response: an acknowledgement within 7 days, an assessment within 30. Th
 - **A change different from the preview.** The run does something the preview didn't show, or more than it showed.
 - **A change the agent's role doesn't allow** in osTicket's own dialog for that action, or a value (assignee, team, department, priority, status) the dialog wouldn't list for that agent.
 - **Access to a ticket the agent can't open** in the ticket view: planning, chatting, running, undoing, resetting.
-- **Another agent's conversation, plan or undo**: reading, running, discarding or undoing it.
+- **Another agent's conversation, earlier conversation, plan or undo**: reading, running, discarding or undoing it.
 - **A request without a valid CSRF token** that changes anything, or any answer to an agent with a pending password change, 2FA setup or an unfinished upgrade.
 - **Running a plan twice**, after 10 minutes, or undoing after 30 seconds.
 - **Prompt injection that gets past the preview.** Ticket content that makes the plugin change the ticket without a confirmed preview, reach another ticket, send anything, or put a planned change on screen in a way that hides what it does.
@@ -47,7 +47,8 @@ Documented design decisions are not findings.
 - **Closing after an assignment in the same plan keeps the new assignee**, unlike osTicket's own close.
 - **Undo of the due date writes the old value directly**, bypassing the edit form's "must be in the future" check.
 - **A key stored in the settings can be decrypted by someone who has both the database and the osTicket files** (`SECRET_SALT`). That is how osTicket protects its own stored passwords; the key file avoids it and is the documented default.
-- **Plans, conversations and counters in the plugin's tables** for 2 days, 12 hours and 90 days.
+- **Plans, conversations, earlier conversations and counters in the plugin's tables** for 2 days, 12 hours, the configured number of days (default 90) and 90 days.
+- **The image address in the settings** is loaded by every agent's browser; an admin who sets an outside address tells that server when agents open the panel.
 - **The offline test model** (`SPA_AI_FAKE=1`) when someone sets that variable on a production server.
 - **Bugs in osTicket itself**, including its permission model. Report those [upstream](https://github.com/osTicket/osTicket/security).
 - Anything that requires admin access to osTicket or write access to the server, including choosing the key file path.

@@ -54,7 +54,9 @@ test('AC-7: undo puts every field back, in reverse order, and says so in the thr
   expect(after).toMatchObject({ status: 'Closed', staff: seed.agents.philipp, prio: 'high' });
   expect(after.due).not.toBe('NULL');
 
-  await expect(card.locator('.spa-ai-undo')).toHaveText(/Undo \(\d+s\)/);
+  // No countdown: a plain button while undo is possible.
+  await expect(card.locator('.spa-ai-undo')).toHaveText('Undo');
+  await expect(card.locator('.spa-ai-undo')).toBeEnabled();
   await card.locator('.spa-ai-undo').click();
   await expect(card.locator('.spa-ai-plan-state')).toHaveText('Undone');
   await expect(card.locator('.spa-ai-plan-undo li.spa-ai-ok')).toHaveCount(4);
@@ -99,7 +101,20 @@ test('undo works once, only for its agent, only inside the window', async ({ pag
   expect(await aiPost(page, '/undo', { plan_id: id })).toEqual({ status: 422, json: { error: 'undo_expired' } });
   expect(ticketRow(T1).due).toBe('NULL');
 
-  // The window's end also reaches the chat: no undo button after it.
+  // Undone: the button is gone.
   await page.reload();
   await expect(page.locator('#spa-ai .spa-ai-undo')).toHaveCount(0);
+});
+
+test('after the window the undo button stays, greyed out', async ({ page }) => {
+  await staffLogin(page, 'admin');
+  await openTicket(page, 'T1');
+  await planAndRun(page, 'due tomorrow');
+  // Moves the stored window into the past, as if 30 seconds had gone by.
+  sql(`UPDATE ost_ai_actions_chat SET transcript = REGEXP_REPLACE(transcript, '"undo_until":[0-9]+', '"undo_until":1')`);
+  await page.reload();
+  const button = page.locator('#spa-ai .spa-ai-plan-done .spa-ai-undo');
+  await expect(button).toHaveText('Undo');
+  await expect(button).toBeDisabled();
+  await expect(button).toHaveAttribute('title', /30 seconds/);
 });

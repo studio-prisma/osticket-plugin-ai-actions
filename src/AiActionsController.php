@@ -7,6 +7,9 @@ declare(strict_types=1);
  *
  *   POST /ai/plan     ticket_id, prompt  -> answer, preview, plan_id
  *   POST /ai/run      plan_id            -> result per change
+ *   POST /ai/undo, /ai/discard, /ai/reset
+ *   GET  /ai/chat     ticket_id          -> the conversation
+ *   GET  /ai/history  ticket_id[, id]    -> earlier conversations, read only
  *   GET  /ai/assets/* the field's CSS and JavaScript
  *
  * Every POST checks, in this order: plugin on, signed-in agent allowed by
@@ -24,7 +27,11 @@ final class AiActionsController
     /** @var array */
     private static $settings = array('enabled' => false, 'roles' => array(), 'model' => 'claude-opus-5-5',
                                      'effort' => 'low', 'key_source' => 'file', 'key_file' => '', 'daily_requests' => 100,
-                                     'daily_tokens' => 500000, 'thread_chars' => 12000);
+                                     'daily_tokens' => 500000, 'thread_chars' => 12000, 'history_days' => 90,
+                                     'name' => '', 'icon' => 'sparkles', 'image' => '', 'accent' => '', 'welcome' => '');
+
+    /** Icons for the bubble and the window header; "image" uses the image setting. */
+    public const ICONS = array('sparkles', 'robot', 'chat', 'bulb', 'bolt', 'initial', 'image');
 
     /** @var callable|null returns the stored key, decrypted; kept out of $settings on purpose */
     private static $storedKey;
@@ -33,6 +40,7 @@ final class AiActionsController
     {
         self::$settings = self::normalise($raw);
         self::$storedKey = $storedKey;
+        AiActionsChatStore::$keepDays = self::$settings['history_days'];
     }
 
     public static function settings(): array
@@ -57,7 +65,41 @@ final class AiActionsController
             'daily_requests' => self::number($raw['daily_requests'] ?? null, 100, 0, 10000),
             'daily_tokens'   => self::number($raw['daily_tokens'] ?? null, 500000, 0, 100000000),
             'thread_chars'   => self::number($raw['thread_chars'] ?? null, 12000, 2000, 50000),
+            // 0 = earlier conversations are not kept.
+            'history_days'   => self::number($raw['history_days'] ?? null, 90, 0, 3650),
+            'name'    => self::cleanName(is_string($raw['name'] ?? null) ? $raw['name'] : '', ''),
+            'icon'    => in_array(self::keyList($raw['icon'] ?? null, '/^[a-z]+$/')[0] ?? '', self::ICONS, true)
+                ? self::keyList($raw['icon'], '/^[a-z]+$/')[0] : 'sparkles',
+            'image'   => self::imageUrl($raw['image'] ?? null),
+            'accent'  => is_string($raw['accent'] ?? null) && preg_match('/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', trim($raw['accent']))
+                ? strtolower(trim($raw['accent'])) : '',
+            'welcome' => self::welcome($raw['welcome'] ?? null),
         );
+    }
+
+    /**
+     * An https:// URL or a path on this server, without characters that
+     * could leave an HTML attribute or a CSS url(). Empty otherwise.
+     * Public for the unit tests.
+     */
+    public static function imageUrl($raw): string
+    {
+        $s = is_string($raw) ? trim($raw) : '';
+        if ($s === '' || strlen($s) > 500 || !preg_match('#^(https://[A-Za-z0-9.-]+(:\d+)?/|/(?!/))[A-Za-z0-9._~%!$&*+,;=:@/?-]*$#', $s)) {
+            return '';
+        }
+        return $s;
+    }
+
+    /** Welcome text for an empty conversation: plain text, at most 500 characters. Public for the unit tests. */
+    public static function welcome($raw): string
+    {
+        $s = is_string($raw) && preg_match('//u', $raw) ? str_replace("\r\n", "\n", $raw) : '';
+        $s = trim((string) preg_replace('/[\x00-\x08\x0B-\x1F\x7F]+/u', '', $s));
+        if (preg_match_all('/./su', $s) > 500) {
+            $s = implode('', array_slice(preg_split('//u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: array(), 0, 500));
+        }
+        return $s;
     }
 
     /** Whole number from a setting, $default when empty or not a number, clamped. */
@@ -386,6 +428,45 @@ final class AiActionsController
         return self::json(200, self::chatPayload($ticket, AiActionsChatStore::load($staffId, (int) $ticket->getId())));
     }
 
+    /**
+     * GET /ai/history?ticket_id=N: the agent's earlier conversations about
+     * this ticket; with &id=M one of them, read only.
+     */
+    public static function history(): string
+    {
+        global $thisstaff;
+
+        header('Cache-Control: no-store');
+        if (!self::allowed($thisstaff)) {
+            return self::json(404, array('error' => 'not_found'));
+        }
+        $ticket = self::visibleTicket($thisstaff, $_GET['ticket_id'] ?? 0);
+        if (!$ticket) {
+            return self::json(404, array('error' => 'not_found'));
+        }
+        $staffId = (int) $thisstaff->getId();
+        $tz = AiActionsTime::zone($thisstaff);
+        $dbTz = AiActionsTime::dbZone();
+        $id = is_scalar($_GET['id'] ?? null) ? (int) $_GET['id'] : 0;
+        if ($id > 0) {
+            $one = AiActionsChatStore::archivedOne($staffId, (int) $ticket->getId(), $id);
+            if (!$one) {
+                return self::json(404, array('error' => 'not_found'));
+            }
+            return self::json(200, array(
+                'id'         => $id,
+                'ended'      => AiActionsTime::fromDb($one['ended'], $dbTz, $tz),
+                'transcript' => AiActionsChatStore::closed($one['transcript']),
+            ));
+        }
+        $list = array();
+        foreach (AiActionsChatStore::archived($staffId, (int) $ticket->getId()) as $row) {
+            $row['ended'] = AiActionsTime::fromDb($row['ended'], $dbTz, $tz);
+            $list[] = $row;
+        }
+        return self::json(200, array('conversations' => $list));
+    }
+
     private static function chatPayload($ticket, array $chat): array
     {
         return array(
@@ -455,7 +536,7 @@ final class AiActionsController
     private static function llm(): ?AiActionsLlm
     {
         if (getenv('SPA_AI_FAKE') === '1') {
-            return new AiActionsFakeLlm(self::now(self::timezone($GLOBALS['thisstaff']))->format('Y-m-d'));
+            return new AiActionsFakeLlm(AiActionsTime::now(AiActionsTime::zone($GLOBALS['thisstaff']))->format('Y-m-d'));
         }
         $key = AiActionsKey::load(self::$settings['key_source'], self::$settings['key_file'],
             defined('ROOT_DIR') ? ROOT_DIR : dirname(INCLUDE_DIR), self::$storedKey);
@@ -468,40 +549,42 @@ final class AiActionsController
 
     private static function context($staff, $ticket, int $seenEntry = 0): array
     {
-        $tz = self::timezone($staff);
-        $now = self::now($tz);
-        $data = AiActionsContext::data($ticket, $seenEntry, self::$settings['thread_chars']);
+        $tz = AiActionsTime::zone($staff);
+        $now = AiActionsTime::now($tz);
+        $data = AiActionsContext::data($ticket, $staff, $tz, $seenEntry, self::$settings['thread_chars']);
         return array(
             'now'        => $now->format('Y-m-d H:i'),
             'weekday'    => $now->format('l'),
             'timezone'   => $tz,
+            'utc_offset' => $now->format('P'),
+            'helpdesk'   => self::helpdesk(),
             'data'       => $data['text'],
             'last_entry' => $data['last'],
         );
     }
 
-    private static function timezone($staff): string
+    /**
+     * The help desk's name from Settings → System (Helpdesk Name/Title), so
+     * the model and the window speak of "Example Service" rather than
+     * "osTicket". Public for the unit tests via cleanName().
+     */
+    public static function helpdesk(): string
     {
         global $cfg;
 
-        $candidates = array();
-        if ($staff instanceof Staff) {
-            $candidates[] = (string) $staff->getTimezone();
-        }
-        if ($cfg && method_exists($cfg, 'getDefaultTimezone')) {
-            $candidates[] = (string) $cfg->getDefaultTimezone();
-        }
-        foreach ($candidates as $tz) {
-            if ($tz !== '' && in_array($tz, DateTimeZone::listIdentifiers(), true)) {
-                return $tz;
-            }
-        }
-        return 'UTC';
+        return self::cleanName($cfg && method_exists($cfg, 'getTitle') ? (string) $cfg->getTitle() : '', 'osTicket');
     }
 
-    private static function now(string $tz): DateTime
+    /** One line, no markup characters, at most 60 characters; $default when empty. */
+    public static function cleanName(string $raw, string $default): string
     {
-        return new DateTime('now', new DateTimeZone($tz));
+        $s = preg_match('//u', $raw) ? $raw : '';
+        $s = trim((string) preg_replace('/[\x00-\x1F\x7F<>]+/u', ' ', $s));
+        $s = (string) preg_replace('/\s+/u', ' ', $s);
+        if (preg_match_all('/./su', $s) > 60) {
+            $s = implode('', array_slice(preg_split('//u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: array(), 0, 60));
+        }
+        return $s !== '' ? $s : $default;
     }
 
     /** Plain-text note body. Public for the unit tests. */

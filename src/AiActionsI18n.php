@@ -4,12 +4,22 @@ declare(strict_types=1);
 
 /**
  * Interface strings. German for agents whose language starts with "de",
- * English otherwise.
+ * English otherwise. "%desk%" becomes the help desk's name.
  */
 final class AiActionsI18n
 {
     /** @return array<string, mixed> */
-    public static function strings(string $lang): array
+    public static function strings(string $lang, ?string $desk = null): array
+    {
+        $desk = $desk ?? AiActionsController::helpdesk();
+        $replace = static function ($v) use (&$replace, $desk) {
+            return is_array($v) ? array_map($replace, $v) : str_replace('%desk%', $desk, $v);
+        };
+        return array_map($replace, self::raw($lang));
+    }
+
+    /** @return array<string, mixed> */
+    private static function raw(string $lang): array
     {
         $de = stripos($lang, 'de') === 0;
         return $de ? array(
@@ -58,8 +68,23 @@ final class AiActionsI18n
             'note_undo_title' => 'AI-Aktion rückgängig gemacht',
             'note_undone'  => 'Zurückgesetzt',
             'undo'         => 'Rückgängig',
-            'undo_left'    => 'Rückgängig (%ds)',
+            'undo_gone'    => 'Rückgängig geht nur bis %d Sekunden nach dem Ausführen.',
             'undoing'      => 'Wird zurückgesetzt …',
+            'history'      => 'Frühere Gespräche',
+            'history_none' => 'Noch keine früheren Gespräche zu diesem Ticket.',
+            'history_kept' => 'Gespräche mit „Neu“ oder nach %d Stunden Pause landen hier und bleiben %d Tage. Nur du siehst deine.',
+            'history_off'  => 'Frühere Gespräche werden nicht aufbewahrt (Einstellung des Admins).',
+            'back'         => 'Zurück',
+            'messages'     => '%d Nachrichten',
+            'read_only'    => 'Abgeschlossenes Gespräch, nur zum Lesen.',
+            'large'        => 'Große Ansicht',
+            'small'        => 'Kleine Ansicht',
+            'resize'       => 'Größe ändern',
+            'suggestions'  => array(
+                'Fasse das Ticket kurz zusammen',
+                'Welche Unter-Tickets gibt es?',
+                'Setze die Fälligkeit auf morgen 10 Uhr',
+            ),
             'errors'       => array(
                 'generic'           => 'Das hat nicht geklappt. Bitte erneut versuchen.',
                 'not_configured'    => 'Die AI-Anbindung ist nicht eingerichtet. Bitte an den Admin wenden.',
@@ -67,11 +92,11 @@ final class AiActionsI18n
                 'invalid_prompt'    => 'Bitte eine Nachricht mit höchstens 2000 Zeichen eingeben.',
                 'forbidden'         => 'keine Berechtigung',
                 'not_open'          => 'Ticket ist geschlossen',
-                'rejected'          => 'von osTicket abgelehnt',
+                'rejected'          => 'von %desk% abgelehnt',
                 'csrf'              => 'Sitzung abgelaufen, bitte die Seite neu laden.',
                 'unavailable'       => 'Die AI ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen.',
                 'refused'           => 'Die AI hat die Anfrage abgelehnt.',
-                'conversation_full' => 'Dieses Gespräch ist voll. Mit „Neu“ beginnst du ein frisches.',
+                'conversation_full' => 'Dieses Gespräch ist voll. Mit „Neu“ beginnst du ein frisches; dieses bleibt unter „Frühere Gespräche“.',
                 'not_found'         => 'Ticket nicht gefunden oder kein Zugriff.',
                 'undo_expired'      => 'Zu spät: Rückgängig geht nur kurz nach dem Ausführen.',
                 'draft_exists'      => 'es gibt schon einen Antwortentwurf, erst senden oder löschen',
@@ -125,8 +150,23 @@ final class AiActionsI18n
             'note_undo_title' => 'AI action undone',
             'note_undone'  => 'Put back',
             'undo'         => 'Undo',
-            'undo_left'    => 'Undo (%ds)',
+            'undo_gone'    => 'Undo works only up to %d seconds after running.',
             'undoing'      => 'Undoing …',
+            'history'      => 'Earlier conversations',
+            'history_none' => 'No earlier conversations about this ticket yet.',
+            'history_kept' => 'Conversations end up here with "New" or after %d hours idle, and stay %d days. Only you see yours.',
+            'history_off'  => 'Earlier conversations are not kept (admin setting).',
+            'back'         => 'Back',
+            'messages'     => '%d messages',
+            'read_only'    => 'Finished conversation, read only.',
+            'large'        => 'Large view',
+            'small'        => 'Small view',
+            'resize'       => 'Resize',
+            'suggestions'  => array(
+                'Summarise this ticket briefly',
+                'Which sub-tickets are there?',
+                'Set the due date to tomorrow 10 am',
+            ),
             'errors'       => array(
                 'generic'           => 'That didn\'t work. Please try again.',
                 'not_configured'    => 'The AI connection is not set up. Please contact your admin.',
@@ -134,11 +174,11 @@ final class AiActionsI18n
                 'invalid_prompt'    => 'Please enter a message of at most 2000 characters.',
                 'forbidden'         => 'permission denied',
                 'not_open'          => 'ticket is closed',
-                'rejected'          => 'rejected by osTicket',
+                'rejected'          => 'rejected by %desk%',
                 'csrf'              => 'Session expired, please reload the page.',
                 'unavailable'       => 'The AI is not reachable right now. Please try again in a moment.',
                 'refused'           => 'The AI declined the request.',
-                'conversation_full' => 'This conversation is full. "New" starts a fresh one.',
+                'conversation_full' => 'This conversation is full. "New" starts a fresh one; this one stays under "Earlier conversations".',
                 'not_found'         => 'Ticket not found or no access.',
                 'undo_expired'      => 'Too late: undo works only shortly after running.',
                 'draft_exists'      => 'a reply draft already exists, send or delete it first',

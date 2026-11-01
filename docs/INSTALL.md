@@ -111,6 +111,8 @@ Check: `include/plugins/ai-actions/plugin.php` exists and is readable by the web
 | Model, Effort | defaults (Claude Opus 5.5, Low) |
 | Messages, Tokens | defaults (100, 500,000), or lower for the test |
 | Thread length | default (12,000) |
+| Name, Icon, Own image, Accent colour, Welcome text | empty is fine; set them once the chat works |
+| Keep earlier conversations (days) | default (90), or 0 to keep nothing |
 
 4. Check the instance as enabled. Save. On the plugin list, make sure the plugin itself is **Enabled**.
 
@@ -177,6 +179,8 @@ Only then select further roles.
 ## Updating
 
 Replace the folder `include/plugins/ai-actions/` with the new release. Settings stay in osTicket's config table, the key file stays where it is. Read the CHANGELOG first: a major version bump means changed behaviour or settings.
+
+From 0.1.x to 0.2.0: the plugin adds the table `ost_ai_actions_chat_archive` by itself on first use. New settings start at their defaults (no name, sparkles icon, theme colour, 90 days of earlier conversations).
 
 ## Uninstalling
 

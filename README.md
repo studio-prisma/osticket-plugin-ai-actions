@@ -17,8 +17,13 @@ A chat in the osTicket agent panel that turns plain-language requests into ticke
 | Questions | "What does the customer actually want?", "Summarise the thread". Answered from the ticket's facts and thread; nothing changes |
 | Changes | Due date, priority, assignment to an agent or team, department, status, internal note, reply draft, sub-ticket |
 | Preview | Every planned change as a line with osTicket's own labels, notes and drafts with their full text. **Run** or **Discard** |
-| Undo | 30 seconds after a run, for every field change (not for notes, drafts and sub-tickets) |
+| Undo | 30 seconds after a run, for every field change (not for notes, drafts and sub-tickets). Afterwards the button stays, greyed out |
+| Refresh | After a run or an undo the ticket view reloads, on the board the quick view reopens with the new values |
 | Follow-ups | One conversation per agent and ticket: "and now a week later" refers to the date just set. The model is told whether its last plan ran, was discarded or undone |
+| Earlier conversations | "New" or 12 hours idle ends a conversation; it stays readable under the clock icon for 90 days (setting), for its own agent only |
+| Context | Ticket facts, thread, parent ticket and sub-tickets (number, subject, status, assignee, due date; only those the agent may open). All times in the agent's time zone, summer and winter time included |
+| Window | Large view, resizable by the top-left corner (size is remembered), full screen on phones |
+| Look | Name, icon or own image, accent colour and welcome text from the settings. The model calls the system by the help desk name from Settings → System |
 | Record | Every run and every undo leaves an internal note "AI action" with the request and the result of each change |
 | Limits | Messages and tokens per agent and day, one message at a time per agent |
 
@@ -73,6 +78,12 @@ Short version:
 | Messages | 100 | Per agent and day, 0 = no limit |
 | Tokens | 500,000 | Input plus output per agent and day, 0 = no limit |
 | Thread length | 12,000 | Characters of the thread the model reads, newest first (2,000 to 50,000) |
+| Name of the assistant | empty | Window header and bubble label. Empty: "AI assistant" |
+| Icon | Sparkles | Sparkles, robot, speech bubble, light bulb, lightning bolt, first letter of the name, or own image |
+| Own image | empty | For "Own image": https:// address or a path on this server, shown round |
+| Accent colour | empty | Hex colour for bubble, own messages and main buttons. Empty: the theme's |
+| Welcome text | empty | Shown in an empty conversation |
+| Keep earlier conversations (days) | 90 | How long ended conversations stay readable for their agent. 0 = not kept |
 
 Which source to choose: a key file keeps the key out of the database and its backups entirely. Stored in the settings, it is encrypted, but someone with both the database and the osTicket files can decrypt it. The environment variable sits wherever your server or panel keeps PHP settings. The install guide compares the three.
 
@@ -104,6 +115,7 @@ Not verified: PHP 8.1, 8.2 and 8.4 at runtime (lint only), osTicket with enforce
 - **Attachments aren't read.**
 - **Closing after an assignment in the same plan keeps the new assignee.** osTicket itself would make the closing agent the assignee; the plugin follows the agent's request instead.
 - **On the board, the open chat can cover cards** in the right-hand column while the quick view is open.
+- **Earlier conversations are read only** and visible to their own agent only; another agent's questions about the same ticket stay private.
 - **German and English** interface. The model answers in the language of the request.
 
 ---

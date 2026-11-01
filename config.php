@@ -105,6 +105,68 @@ class AiActionsConfig extends PluginConfig
                 ),
             )),
 
+            'sec_look' => new SectionBreakField(array(
+                'label' => 'Appearance',
+            )),
+
+            'assistant_name' => new TextboxField(array(
+                'label'         => 'Name of the assistant',
+                'default'       => '',
+                'hint'          => 'Shown in the window header and on the bubble, e.g. "Prisma". '
+                                 . 'Empty: "AI assistant" in the agent\'s language.',
+                'configuration' => array('size' => 30, 'length' => 60),
+            )),
+
+            'assistant_icon' => new ChoiceField(array(
+                'label'   => 'Icon',
+                'default' => 'sparkles',
+                'choices' => array(
+                    'sparkles' => 'Sparkles',
+                    'robot'    => 'Robot',
+                    'chat'     => 'Speech bubble',
+                    'bulb'     => 'Light bulb',
+                    'bolt'     => 'Lightning bolt',
+                    'initial'  => 'First letter of the name',
+                    'image'    => 'Own image (below)',
+                ),
+                'hint'    => 'In the round bubble and as the picture next to the name.',
+            )),
+
+            'assistant_image' => new TextboxField(array(
+                'label'         => 'Own image',
+                'default'       => '',
+                'hint'          => 'For "Own image": an https:// address or a path on this server, e.g. '
+                                 . '/logo-square.png. Square images look best; it is shown round.',
+                'configuration' => array('size' => 60, 'length' => 500),
+            )),
+
+            'accent' => new TextboxField(array(
+                'label'         => 'Accent colour',
+                'default'       => '',
+                'hint'          => 'Hex colour for the bubble, your own messages and the main buttons, e.g. '
+                                 . '#330066. Empty: the theme\'s colour.',
+                'configuration' => array('size' => 10, 'length' => 7),
+            )),
+
+            'welcome' => new TextareaField(array(
+                'label'         => 'Welcome text',
+                'default'       => '',
+                'hint'          => 'Shown in an empty conversation, plain text. Empty: a short built-in hint.',
+                'configuration' => array('rows' => 3, 'cols' => 60, 'html' => false, 'length' => 500),
+            )),
+
+            'sec_history' => new SectionBreakField(array(
+                'label' => 'Conversations',
+            )),
+
+            'history_days' => new TextboxField(array(
+                'label'         => 'Keep earlier conversations (days)',
+                'default'       => '90',
+                'hint'          => 'Conversations ended with "New" or after 12 hours idle stay readable for '
+                                 . 'their agent under "Earlier conversations". 0 = not kept.',
+                'configuration' => array('size' => 6, 'length' => 4, 'validator' => 'number'),
+            )),
+
             'sec_limits' => new SectionBreakField(array(
                 'label' => 'Limits per agent and day',
             )),
@@ -145,6 +207,16 @@ class AiActionsConfig extends PluginConfig
         $clear = !empty($config['key_stored_clear']);
         if ($clear && $pasted !== '') {
             $errors['err'] = 'Either paste a new API key or remove the stored one, not both.';
+            return false;
+        }
+        $accent = is_string($config['accent'] ?? null) ? trim($config['accent']) : '';
+        if ($accent !== '' && !preg_match('/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', $accent)) {
+            $errors['err'] = 'Accent colour: a hex colour such as #330066, or empty.';
+            return false;
+        }
+        $image = is_string($config['assistant_image'] ?? null) ? trim($config['assistant_image']) : '';
+        if ($image !== '' && AiActionsController::imageUrl($image) === '') {
+            $errors['err'] = 'Own image: an https:// address or a path starting with /, without spaces or quotes.';
             return false;
         }
         if ($pasted !== '' && !AiActionsKey::isKey($pasted)) {

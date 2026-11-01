@@ -29,6 +29,7 @@ require_once __DIR__ . '/src/AiActionsChoices.php';
 require_once __DIR__ . '/src/AiActionsLlm.php';
 require_once __DIR__ . '/src/AiActionsKey.php';
 require_once __DIR__ . '/src/AiActionsClaude.php';
+require_once __DIR__ . '/src/AiActionsTime.php';
 require_once __DIR__ . '/src/AiActionsContext.php';
 require_once __DIR__ . '/src/AiActionsPlanner.php';
 require_once __DIR__ . '/src/AiActionsRunStore.php';
@@ -41,7 +42,7 @@ require_once __DIR__ . '/src/AiActionsController.php';
 class AiActionsPlugin extends Plugin
 {
     /** Mirrors plugin.php; used for cache-busting the asset URLs only. */
-    public const VERSION = '0.1.0';
+    public const VERSION = '0.2.0';
 
     /** Route base, relative to ROOT_PATH. */
     public const STAFF_BASE = 'scp/ajax.php/ai';
@@ -78,6 +79,12 @@ class AiActionsPlugin extends Plugin
             'daily_requests' => $config->get('daily_requests'),
             'daily_tokens'   => $config->get('daily_tokens'),
             'thread_chars'   => $config->get('thread_chars'),
+            'history_days'   => $config->get('history_days'),
+            'name'     => $config->get('assistant_name'),
+            'icon'     => $config->get('assistant_icon'),
+            'image'    => $config->get('assistant_image'),
+            'accent'   => $config->get('accent'),
+            'welcome'  => $config->get('welcome'),
         ), static function () use ($config) {
             // PluginConfig decrypts PasswordField values when it loads.
             $v = $config->get('key_stored');
@@ -110,6 +117,9 @@ class AiActionsPlugin extends Plugin
         }));
         $dispatcher->append(url_post('^/ai/discard$', static function () {
             return AiActionsController::discard();
+        }));
+        $dispatcher->append(url_get('^/ai/history$', static function () {
+            return AiActionsController::history();
         }));
         $dispatcher->append(url_post('^/ai/reset$', static function () {
             return AiActionsController::reset();

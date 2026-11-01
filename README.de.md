@@ -17,8 +17,13 @@ Ein Chat im Agenten-Bereich von osTicket, der Anfragen in Alltagssprache über d
 | Fragen | „Was will die Kundin eigentlich?“, „Fasse den Verlauf zusammen“. Beantwortet aus Ticketdaten und Verlauf, es ändert sich nichts |
 | Änderungen | Fälligkeit, Priorität, Zuweisung an Agent oder Team, Abteilung, Status, interne Notiz, Antwortentwurf, Unter-Ticket |
 | Vorschau | Jede geplante Änderung als Zeile mit osTickets eigenen Bezeichnungen, Notizen und Entwürfe mit vollem Text. **Ausführen** oder **Verwerfen** |
-| Rückgängig | 30 Sekunden nach dem Ausführen, für jede Feldänderung (nicht für Notizen, Entwürfe und Unter-Tickets) |
+| Rückgängig | 30 Sekunden nach dem Ausführen, für jede Feldänderung (nicht für Notizen, Entwürfe und Unter-Tickets). Danach bleibt der Knopf ausgegraut stehen |
+| Aktualisieren | Nach Ausführen oder Rückgängig lädt die Ticketansicht neu, auf dem Board öffnet sich die Schnellansicht mit den neuen Werten wieder |
 | Folgefragen | Ein Gespräch pro Agent und Ticket: „und jetzt eine Woche später“ bezieht sich auf das gerade gesetzte Datum. Das Modell erfährt, ob sein letzter Plan ausgeführt, verworfen oder zurückgenommen wurde |
+| Frühere Gespräche | „Neu“ oder 12 Stunden Pause beendet ein Gespräch; es bleibt unter dem Uhr-Symbol 90 Tage lesbar (Einstellung), nur für den eigenen Agenten |
+| Kontext | Ticketdaten, Verlauf, Eltern-Ticket und Unter-Tickets (Nummer, Betreff, Status, Zuständig, Fälligkeit; nur die, die der Agent öffnen darf). Alle Zeiten in der Zeitzone des Agenten, Sommer- und Winterzeit eingeschlossen |
+| Fenster | Große Ansicht, Größe über die linke obere Ecke ziehbar (wird gemerkt), auf dem Handy Vollbild |
+| Aussehen | Name, Icon oder eigenes Bild, Akzentfarbe und Begrüßungstext aus den Einstellungen. Das Modell nennt das System beim Helpdesk-Namen aus Einstellungen → System |
 | Protokoll | Jedes Ausführen und jedes Rückgängig hinterlässt eine interne Notiz „AI-Aktion“ mit Anfrage und Ergebnis jeder Änderung |
 | Grenzen | Nachrichten und Tokens pro Agent und Tag, eine Nachricht gleichzeitig pro Agent |
 
@@ -73,6 +78,12 @@ Kurzfassung:
 | Messages | 100 | Pro Agent und Tag, 0 = kein Limit |
 | Tokens | 500.000 | Input plus Output pro Agent und Tag, 0 = kein Limit |
 | Thread length | 12.000 | Zeichen des Verlaufs, die das Modell liest, neueste zuerst (2.000 bis 50.000) |
+| Name of the assistant | leer | Fenstertitel und Bubble-Beschriftung. Leer: „AI-Assistent“ |
+| Icon | Sparkles | Funkeln, Roboter, Sprechblase, Glühbirne, Blitz, Anfangsbuchstabe des Namens oder eigenes Bild |
+| Own image | leer | Für „Own image“: https://-Adresse oder Pfad auf diesem Server, rund angezeigt |
+| Accent colour | leer | Hex-Farbe für Bubble, eigene Nachrichten und Hauptknöpfe. Leer: die des Themes |
+| Welcome text | leer | Steht in einem leeren Gespräch |
+| Keep earlier conversations (days) | 90 | Wie lange beendete Gespräche für ihren Agenten lesbar bleiben. 0 = nicht aufbewahren |
 
 Welche Quelle? Eine Key-Datei hält den Key ganz aus der Datenbank und ihren Backups heraus. In den Einstellungen gespeichert ist er verschlüsselt, aber wer Datenbank und osTicket-Dateien zusammen hat, kann ihn entschlüsseln. Die Umgebungsvariable liegt dort, wo dein Server oder Panel die PHP-Einstellungen hält. Die Installationsanleitung vergleicht die drei.
 
@@ -104,6 +115,7 @@ Nicht geprüft: PHP 8.1, 8.2 und 8.4 zur Laufzeit (nur Lint), osTicket mit erzwu
 - **Anhänge werden nicht gelesen.**
 - **Schließen nach einer Zuweisung im selben Plan behält die neue Zuweisung.** osTicket selbst würde den schließenden Agenten zuweisen; das Plugin folgt der Anfrage des Agenten.
 - **Auf dem Board kann der offene Chat Karten** in der rechten Spalte verdecken, solange die Schnellansicht offen ist.
+- **Frühere Gespräche sind nur lesbar** und nur für den eigenen Agenten sichtbar; was ein Kollege zum selben Ticket gefragt hat, bleibt privat.
 - **Oberfläche Deutsch und Englisch.** Das Modell antwortet in der Sprache der Anfrage.
 
 ---

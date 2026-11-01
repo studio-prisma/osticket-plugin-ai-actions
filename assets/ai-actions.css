@@ -72,6 +72,8 @@
   align-items: center;
   justify-content: center;
   transition: transform 160ms ease, box-shadow 160ms ease;
+  padding: 0;
+  overflow: hidden;
 }
 
 .spa-ai-launcher:hover {
@@ -426,4 +428,265 @@
 
 .spa-ai-panel .spa-ai-undo:hover {
   background: var(--spa-soft);
+}
+
+.spa-ai-panel .spa-ai-undo:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: var(--spa-surface);
+}
+
+/* ---------------------------------------------------------------- avatar */
+
+.spa-ai-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.spa-ai-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.spa-ai-avatar-launcher {
+  width: 100%;
+  height: 100%;
+}
+
+.spa-ai-initial {
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.spa-ai-avatar-head {
+  width: 30px;
+  height: 30px;
+  background: var(--spa-accent);
+  color: var(--spa-accent-ink);
+}
+
+.spa-ai-avatar-head .spa-ai-initial {
+  font-size: 14px;
+}
+
+/* -------------------------------------------------------- header buttons */
+
+.spa-ai-panel .spa-ai-icon-btn svg {
+  display: block;
+}
+
+.spa-ai-panel .spa-ai-history-btn,
+.spa-ai-panel .spa-ai-large-btn {
+  padding: 5px 6px;
+}
+
+.spa-ai-panel .spa-ai-back {
+  padding: 4px 6px;
+  font-weight: 600;
+}
+
+.spa-ai-panel [hidden] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------- welcome, chips */
+
+.spa-ai-welcome {
+  white-space: pre-wrap;
+}
+
+.spa-ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 4px;
+}
+
+.spa-ai-panel .spa-ai-chip {
+  border: 1px solid var(--spa-line);
+  background: var(--spa-surface);
+  color: var(--spa-ink);
+  border-radius: 999px;
+  padding: 4px 10px;
+  margin: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: none;
+  background-image: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.spa-ai-panel .spa-ai-chip:hover {
+  background: var(--spa-soft);
+  border-color: var(--spa-accent);
+}
+
+/* --------------------------------------------------------------- history */
+
+.spa-ai-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.spa-ai-panel .spa-ai-history-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  border: 1px solid var(--spa-line);
+  background: var(--spa-surface);
+  color: var(--spa-ink);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 0;
+  font: inherit;
+  box-shadow: none;
+  background-image: none;
+  cursor: pointer;
+}
+
+.spa-ai-panel .spa-ai-history-item:hover {
+  background: var(--spa-soft);
+}
+
+.spa-ai-history-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.spa-ai-history-meta {
+  color: var(--spa-muted);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- resize */
+
+.spa-ai-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 1;
+  touch-action: none;
+}
+
+.spa-ai-grip::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid var(--spa-line);
+  border-left: 2px solid var(--spa-line);
+  border-top-left-radius: 4px;
+}
+
+.spa-ai-grip:hover::before {
+  border-color: var(--spa-muted);
+}
+
+.spa-ai-panel {
+  min-width: 320px;
+  min-height: 360px;
+}
+
+.spa-ai-resizing {
+  user-select: none;
+}
+
+/* ------------------------------------------------------------ large view */
+
+.spa-ai-panel.spa-ai-large {
+  top: 24px;
+  bottom: 24px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: min(1040px, calc(100vw - 48px));
+  max-width: none;
+  height: auto;
+  max-height: none;
+  z-index: 9;
+  font-size: 14px;
+}
+
+.spa-ai-large .spa-ai-grip {
+  display: none;
+}
+
+.spa-ai-large .spa-ai-log {
+  padding: 20px 28px 10px;
+}
+
+.spa-ai-large .spa-ai-msg {
+  max-width: 76%;
+}
+
+/* ----------------------------------------------------------------- phone */
+
+@media (max-width: 640px) {
+  .spa-ai-launcher {
+    bottom: 14px;
+    width: 48px;
+    height: 48px;
+  }
+
+  .spa-ai-panel,
+  .spa-ai-panel.spa-ai-large {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    z-index: 11;
+    font-size: 15px;
+  }
+
+  .spa-ai-grip,
+  .spa-ai-panel .spa-ai-large-btn {
+    display: none !important;
+  }
+
+  .spa-ai-msg {
+    max-width: 92%;
+  }
+
+  .spa-ai-panel .spa-ai-input {
+    font-size: 16px; /* below 16px iOS zooms into the field */
+  }
+
+  .spa-ai-panel .spa-ai-close {
+    font-size: 26px;
+    padding: 2px 10px;
+  }
+
+  /* The bubble would sit on the send button. */
+  .spa-ai-launcher.spa-ai-launcher-open {
+    display: none;
+  }
 }

@@ -204,8 +204,14 @@ final class AiActionsExecutor
         if (AiActionsTools::localDateTime($due) === null) {
             return self::fail('rejected');
         }
+        // The model's time is wall-clock time for the agent. Without an offset
+        // osTicket would read it as UTC (17:00 shown as 18:00 in Berlin).
+        $value = AiActionsTime::withOffset($due, AiActionsTime::zone($staff));
+        if ($value === null) {
+            return self::fail('rejected');
+        }
         $previous = $ticket->getDueDate();
-        return self::editField($ticket, $field, $due, array('duedate' => $previous));
+        return self::editField($ticket, $field, $value, array('duedate' => $previous));
     }
 
     /** TicketsAjaxAPI::editField() for the priority field. */

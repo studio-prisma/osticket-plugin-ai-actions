@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
+### Added
+
+- Earlier conversations: "New" and 12 hours idle no longer delete a conversation, they move it to an archive. The clock icon lists them per ticket, newest first, read only, for the own agent only. Kept for a configurable number of days (default 90, 0 = not kept).
+- The model sees the parent ticket and the sub-tickets (number, subject, status, assignee, due date), only those the agent may open.
+- Settings for the assistant's name, icon (five icons, first letter, or own image), accent colour and welcome text.
+- Large view, a window resizable by its top-left corner (remembered per browser), full screen on phones.
+- Three suggestions in an empty conversation.
+- The SLA due date in the ticket facts while no own due date is set, so the model and the ticket view agree.
+- The model and the error messages call the system by the help desk name from Settings → System instead of "osTicket".
+
+### Changed
+
+- Undo shows no countdown; after 30 seconds the button stays, greyed out.
+- After a run or an undo on the Ticket Board, the page reloads with the quick view of the ticket open again, so the drawer shows the new values.
+- Thread entries and the due date reach the model in the agent's time zone instead of database time.
+
+### Fixed
+
+- A due date was stored as UTC: "17:00" showed as 18:00 in Berlin in winter. The plugin now passes the time with the agent's offset for that date, so summer and winter time are right.
+- The Plesk path hint in the settings lost its `<domain>` placeholder.
+
 ## [0.1.0] - 2026-11-01
 
 First release.
@@ -36,5 +59,6 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/tag/v0.1.0

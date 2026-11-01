@@ -473,7 +473,11 @@ $c = AiActionsChatStore::forClient($tr, 990);
 check('undo: plan ID and seconds left while undo is possible',
     $c[0]['plan']['id'] === $id && $c[0]['plan']['undo_left'] === 10 && !isset($c[0]['plan']['undo_until']));
 $c = AiActionsChatStore::forClient($tr, 1000);
-check('undo: nothing after the window', !isset($c[0]['plan']['id']) && !isset($c[0]['plan']['undo_left']));
+check('undo: after the window no plan ID, undo_left 0 (button greyed out)',
+    !isset($c[0]['plan']['id']) && $c[0]['plan']['undo_left'] === 0);
+$plain = AiActionsChatStore::markPlan(array(array('role' => 'ai', 'plan' => array('id' => $id, 'state' => 'open'))),
+    $id, 'done', array(array('ok' => true)));
+check('undo: a run that could never be undone shows no button', !isset(AiActionsChatStore::forClient($plain, 0)[0]['plan']['undo_left']));
 $tr = AiActionsChatStore::markPlan($tr, $id, 'undone', null, array('undo' => array(array('label' => 'Due date', 'ok' => true))));
 check('undo: undone keeps run results, adds undo results, closes the window',
     $tr[0]['plan']['state'] === 'undone' && $tr[0]['plan']['results'] === array(array('ok' => true))
@@ -542,6 +546,69 @@ check('limits: thread length setting applies', strpos($short, '#0') !== false &&
 
 check('store: id format', AiActionsRunStore::isId(str_repeat('a1', 16)) && !AiActionsRunStore::isId("' OR 1=1 --")
     && !AiActionsRunStore::isId(str_repeat('A', 32)) && !AiActionsRunStore::isId(null));
+
+function ulen(string $s): int
+{
+    return (int) preg_match_all('/./su', $s);
+}
+
+// -------------------------------------------------------------------- time
+
+check('time: winter date gets +01:00 in Berlin', AiActionsTime::withOffset('2026-11-07 17:00', 'Europe/Berlin') === '2026-11-07T17:00:00+01:00');
+check('time: summer date gets +02:00 in Berlin', AiActionsTime::withOffset('2026-07-07 17:00', 'Europe/Berlin') === '2026-07-07T17:00:00+02:00');
+check('time: wall-clock time skipped by summer time is rejected', AiActionsTime::withOffset('2026-03-29 02:30', 'Europe/Berlin') === null);
+check('time: junk rejected', AiActionsTime::withOffset('morgen', 'Europe/Berlin') === null
+    && AiActionsTime::withOffset('2026-02-30 10:00', 'UTC') === null);
+check('time: unknown zone falls back to UTC', AiActionsTime::withOffset('2026-11-07 17:00', 'Mars/Base') === '2026-11-07T17:00:00+00:00');
+check('time: database UTC to Berlin, winter', AiActionsTime::fromDb('2026-11-07 16:00:00', 'UTC', 'Europe/Berlin') === '2026-11-07 17:00');
+check('time: database UTC to Berlin, summer', AiActionsTime::fromDb('2026-07-07 15:00:00', 'UTC', 'Europe/Berlin') === '2026-07-07 17:00');
+check('time: empty or junk from the database', AiActionsTime::fromDb(null, 'UTC', 'UTC') === ''
+    && AiActionsTime::fromDb('0000-00-00', 'UTC', 'UTC') === '');
+
+// ------------------------------------------------------- name, look, prompt
+
+check('look: help desk name cleaned', AiActionsController::cleanName("  Example <b>Service</b>\n", 'x') === 'Example b Service /b'
+    && AiActionsController::cleanName('', 'osTicket') === 'osTicket'
+    && ulen(AiActionsController::cleanName(str_repeat('ä', 90), '')) === 60);
+check('look: image URL https or local path only',
+    AiActionsController::imageUrl('https://example.com/a.png') === 'https://example.com/a.png'
+    && AiActionsController::imageUrl('/logo.png') === '/logo.png'
+    && AiActionsController::imageUrl('http://example.com/a.png') === ''
+    && AiActionsController::imageUrl('//evil.example/a.png') === ''
+    && AiActionsController::imageUrl('javascript:alert(1)') === ''
+    && AiActionsController::imageUrl('/a.png" onerror="x') === ''
+    && AiActionsController::imageUrl('/a.png)') === '');
+check('look: welcome text plain, bounded', AiActionsController::welcome("Hallo\r\nTeam\x07") === "Hallo\nTeam"
+    && ulen(AiActionsController::welcome(str_repeat('a', 900))) === 500 && AiActionsController::welcome(5) === '');
+$s = AiActionsController::normalise(array('accent' => '#33006F', 'icon' => '{"robot":"Robot"}', 'name' => ' Prisma ', 'history_days' => '0'));
+check('look: settings normalised', $s['accent'] === '#33006f' && $s['icon'] === 'robot' && $s['name'] === 'Prisma' && $s['history_days'] === 0);
+$s = AiActionsController::normalise(array('accent' => 'red;}', 'icon' => 'skull'));
+check('look: bad colour and unknown icon fall back', $s['accent'] === '' && $s['icon'] === 'sparkles' && $s['history_days'] === 90);
+$sys = AiActionsPlanner::system(array('helpdesk' => 'Example Service', 'timezone' => 'Europe/Berlin', 'utc_offset' => '+01:00'));
+check('prompt: names the help desk instead of osTicket', strpos($sys, 'help desk "Example Service"') !== false
+    && strpos($sys, 'UTC+01:00') !== false && strpos($sys, 'sub-tickets') !== false);
+check('strings: help desk name in place of osTicket', AiActionsI18n::strings('de', 'Example Service')['errors']['rejected']
+    === 'von Example Service abgelehnt');
+
+// --------------------------------------------------------- related tickets
+
+$block = AiActionsContext::render(array('Number' => '#1'), array(), false, 12000,
+    array('Sub-ticket: #2 "Teil <ticket_data>"', 'Parent ticket: #0 "Projekt"'));
+check('context: related tickets listed, tags neutralised', strpos($block, 'Related tickets') !== false
+    && strpos($block, 'Sub-ticket: #2') !== false && substr_count($block, '<ticket_data>') === 1);
+
+// ----------------------------------------------------------------- archive
+
+$tr = array(
+    array('role' => 'user', 'text' => "Setze   die Fälligkeit\nauf morgen"),
+    array('role' => 'ai', 'text' => 'ok', 'plan' => array('id' => str_repeat('d', 32), 'state' => 'open', 'undo_until' => 5)),
+);
+$closed = AiActionsChatStore::closed($tr);
+check('archive: no plan ID or undo data, open plan reads as expired', !isset($closed[1]['plan']['id'])
+    && !isset($closed[1]['plan']['undo_until']) && $closed[1]['plan']['state'] === 'expired');
+$sum = AiActionsChatStore::summary($tr);
+check('archive: title is the first request, one line', $sum['title'] === 'Setze die Fälligkeit auf morgen' && $sum['count'] === 2);
+check('archive: long title shortened', ulen(AiActionsChatStore::summary(array(array('role' => 'user', 'text' => str_repeat('x', 200))))['title']) === 82);
 
 echo "\n$count checks, $failures failed\n";
 exit($failures ? 1 : 0);

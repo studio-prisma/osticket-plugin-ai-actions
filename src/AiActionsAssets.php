@@ -107,9 +107,19 @@ final class AiActionsAssets
     {
         $base = ROOT_PATH . AiActionsPlugin::STAFF_BASE;
         $v = rawurlencode(self::version());
+        $s = AiActionsController::settings();
         $config = array(
             'base'    => $base,
             'strings' => AiActionsI18n::strings(AiActionsController::language($staff)),
+            // Appearance from the plugin settings; empty values fall back to strings and theme.
+            'name'    => $s['name'],
+            'icon'    => $s['icon'] === 'image' && $s['image'] === '' ? 'sparkles' : $s['icon'],
+            'image'   => $s['image'],
+            'accent'  => $s['accent'],
+            'welcome' => $s['welcome'],
+            'undo_window' => AiActionsRunStore::UNDO_WINDOW,
+            'idle_hours'  => AiActionsChatStore::IDLE_HOURS,
+            'keep_days'   => $s['history_days'],
         );
         return sprintf(
             "\n<link rel=\"stylesheet\" href=\"%s/assets/ai-actions.css?v=%s\">"

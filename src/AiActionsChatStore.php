@@ -10,7 +10,10 @@ declare(strict_types=1);
  * browser never sends either back; it only sends the next message. So a
  * client can't slip in an invented assistant turn or tool result.
  *
- * A conversation is dropped IDLE_HOURS after its last message.
+ * A conversation ends with "New" or IDLE_HOURS after its last message. Its
+ * transcript then moves to the archive, where the agent can read it again
+ * for $keepDays days (0: not kept). The archive holds what the window showed,
+ * not the API messages, and no plan IDs: nothing in it can run or be undone.
  */
 final class AiActionsChatStore
 {
@@ -18,6 +21,12 @@ final class AiActionsChatStore
 
     /** User messages per conversation. */
     public const MAX_TURNS = 20;
+
+    /** Earlier conversations listed per agent and ticket. */
+    public const ARCHIVE_LIST_MAX = 50;
+
+    /** @var int days an ended conversation stays readable; set from the plugin settings */
+    public static $keepDays = 90;
 
     /** @var bool */
     private static $ready = false;
@@ -27,11 +36,26 @@ final class AiActionsChatStore
         return TABLE_PREFIX . 'ai_actions_chat';
     }
 
+    public static function archiveTable(): string
+    {
+        return TABLE_PREFIX . 'ai_actions_chat_archive';
+    }
+
     public static function ensure(): void
     {
         if (self::$ready) {
             return;
         }
+        db_query(sprintf("CREATE TABLE IF NOT EXISTS `%s` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `staff_id` INT UNSIGNED NOT NULL,
+            `ticket_id` INT UNSIGNED NOT NULL,
+            `transcript` MEDIUMTEXT NOT NULL,
+            `ended` DATETIME NOT NULL,
+            PRIMARY KEY (`id`),
+            KEY `owner` (`staff_id`, `ticket_id`, `ended`),
+            KEY `ended` (`ended`)
+        ) DEFAULT CHARSET=utf8mb4", self::archiveTable()));
         db_query(sprintf("CREATE TABLE IF NOT EXISTS `%s` (
             `staff_id` INT UNSIGNED NOT NULL,
             `ticket_id` INT UNSIGNED NOT NULL,
@@ -53,7 +77,7 @@ final class AiActionsChatStore
     public static function load(int $staffId, int $ticketId): array
     {
         self::ensure();
-        db_query(sprintf("DELETE FROM `%s` WHERE updated < NOW() - INTERVAL %d HOUR", self::table(), self::IDLE_HOURS));
+        self::expire();
         $res = db_query(sprintf("SELECT messages, transcript, seen_entry, pending, turns FROM `%s`
             WHERE staff_id=%d AND ticket_id=%d", self::table(), $staffId, $ticketId));
         $row = $res ? db_fetch_array($res) : null;
@@ -78,10 +102,106 @@ final class AiActionsChatStore
             self::quote($chat['pending']), (int) $chat['turns']));
     }
 
+    /** Ends the conversation: archived (if kept and not empty), then removed. */
     public static function reset(int $staffId, int $ticketId): void
     {
         self::ensure();
+        $chat = self::load($staffId, $ticketId);
+        self::archive($staffId, $ticketId, $chat['transcript']);
         db_query(sprintf("DELETE FROM `%s` WHERE staff_id=%d AND ticket_id=%d", self::table(), $staffId, $ticketId));
+    }
+
+    /**
+     * Moves idle conversations to the archive and drops archived ones past
+     * $keepDays. Runs on every load; both queries use an index.
+     */
+    private static function expire(): void
+    {
+        $res = db_query(sprintf("SELECT staff_id, ticket_id, transcript FROM `%s`
+            WHERE updated < NOW() - INTERVAL %d HOUR LIMIT 100", self::table(), self::IDLE_HOURS));
+        while ($res && ($row = db_fetch_array($res))) {
+            self::archive((int) $row['staff_id'], (int) $row['ticket_id'], self::decode($row['transcript']));
+            db_query(sprintf("DELETE FROM `%s` WHERE staff_id=%d AND ticket_id=%d AND updated < NOW() - INTERVAL %d HOUR",
+                self::table(), (int) $row['staff_id'], (int) $row['ticket_id'], self::IDLE_HOURS));
+        }
+        db_query(sprintf("DELETE FROM `%s` WHERE ended < NOW() - INTERVAL %d DAY",
+            self::archiveTable(), max(0, self::$keepDays)));
+    }
+
+    private static function archive(int $staffId, int $ticketId, array $transcript): void
+    {
+        if (self::$keepDays <= 0 || !$transcript) {
+            return;
+        }
+        db_query(sprintf("INSERT INTO `%s` (staff_id, ticket_id, transcript, ended) VALUES (%d, %d, %s, NOW())",
+            self::archiveTable(), $staffId, $ticketId, self::quote(self::closed($transcript))));
+    }
+
+    /**
+     * A transcript for the archive: no plan IDs or undo data, and a plan
+     * nobody confirmed reads as not run. Public for the unit tests.
+     */
+    public static function closed(array $transcript): array
+    {
+        foreach ($transcript as &$item) {
+            if (isset($item['plan'])) {
+                unset($item['plan']['id'], $item['plan']['undo_until'], $item['plan']['undo_left']);
+                if (($item['plan']['state'] ?? '') === 'open') {
+                    $item['plan']['state'] = 'expired';
+                }
+            }
+        }
+        unset($item);
+        return $transcript;
+    }
+
+    /**
+     * Earlier conversations of this agent about this ticket, newest first.
+     *
+     * @return array<int, array{id:int, ended:string, title:string, count:int}> ended in database time
+     */
+    public static function archived(int $staffId, int $ticketId): array
+    {
+        self::ensure();
+        self::expire();
+        $res = db_query(sprintf("SELECT id, transcript, ended FROM `%s` WHERE staff_id=%d AND ticket_id=%d
+            ORDER BY ended DESC, id DESC LIMIT %d", self::archiveTable(), $staffId, $ticketId, self::ARCHIVE_LIST_MAX));
+        $out = array();
+        while ($res && ($row = db_fetch_array($res))) {
+            $transcript = self::decode($row['transcript']);
+            $out[] = array('id' => (int) $row['id'], 'ended' => (string) $row['ended']) + self::summary($transcript);
+        }
+        return $out;
+    }
+
+    /** One archived transcript, only for its own agent and ticket. */
+    public static function archivedOne(int $staffId, int $ticketId, int $id): ?array
+    {
+        self::ensure();
+        $res = db_query(sprintf("SELECT transcript, ended FROM `%s` WHERE id=%d AND staff_id=%d AND ticket_id=%d",
+            self::archiveTable(), $id, $staffId, $ticketId));
+        $row = $res ? db_fetch_array($res) : null;
+        return $row ? array('transcript' => self::decode($row['transcript']), 'ended' => (string) $row['ended']) : null;
+    }
+
+    /**
+     * First request (shortened) and number of messages. Public for the unit tests.
+     *
+     * @return array{title:string, count:int}
+     */
+    public static function summary(array $transcript): array
+    {
+        $title = '';
+        foreach ($transcript as $item) {
+            if (($item['role'] ?? '') === 'user' && is_string($item['text'] ?? null)) {
+                $title = trim((string) preg_replace('/\s+/u', ' ', $item['text']));
+                break;
+            }
+        }
+        if (preg_match_all('/./su', $title) > 80) {
+            $title = implode('', array_slice(preg_split('//u', $title, -1, PREG_SPLIT_NO_EMPTY) ?: array(), 0, 80)) . ' …';
+        }
+        return array('title' => $title, 'count' => count($transcript));
     }
 
     /**
@@ -137,8 +257,11 @@ final class AiActionsChatStore
                     unset($item['plan']['id']);
                 }
                 // Seconds left instead of a timestamp: the browser's clock may be off.
+                // 0 once the window has passed: the window shows the button greyed out.
                 if ($undoable) {
                     $item['plan']['undo_left'] = (int) $item['plan']['undo_until'] - $now;
+                } elseif ($state === 'done' && isset($item['plan']['undo_until'])) {
+                    $item['plan']['undo_left'] = 0;
                 }
                 unset($item['plan']['undo_until']);
             }
