@@ -213,6 +213,15 @@ check('key: file inside the web root refused', AiActionsKey::load($tmp . '/webro
 check('key: traversal into the web root refused', AiActionsKey::load($tmp . '/webroot/../webroot/include/key', $tmp . '/webroot')['problem'] === 'file_in_webroot');
 check('key: other file content never used', AiActionsKey::load($tmp . '/passwd', $tmp . '/webroot') === array('key' => null, 'problem' => 'bad_format'));
 check('key: missing file', AiActionsKey::load($tmp . '/nope', $tmp . '/webroot')['problem'] === 'file_unreadable');
+file_put_contents($tmp . '/bom', "\xEF\xBB\xBF" . $fakeKey . "\r\n");
+check('key: BOM and CRLF from a panel file manager are ignored', AiActionsKey::load($tmp . '/bom', $tmp . '/webroot')['key'] === $fakeKey);
+unlink($tmp . '/bom');
+$plesk = '/var/www/vhosts/example.com/' . PATH_SEPARATOR . '/tmp/';
+check('key: open_basedir allows the subscription folder', AiActionsKey::allowedByOpenBasedir('/var/www/vhosts/example.com/private/anthropic.key', $plesk));
+check('key: open_basedir refuses /etc and look-alike prefixes',
+    !AiActionsKey::allowedByOpenBasedir('/etc/osticket-ai/anthropic.key', $plesk)
+    && !AiActionsKey::allowedByOpenBasedir('/var/www/vhosts/example.com.evil/x', '/var/www/vhosts/example.com'));
+check('key: no open_basedir, no limit', AiActionsKey::allowedByOpenBasedir('/etc/x', ''));
 $envBefore = getenv('ANTHROPIC_API_KEY');
 putenv('ANTHROPIC_API_KEY');
 check('key: nothing configured', AiActionsKey::load('', $tmp . '/webroot')['problem'] === 'no_key');

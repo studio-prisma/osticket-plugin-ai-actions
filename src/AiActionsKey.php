@@ -26,6 +26,11 @@ final class AiActionsKey
     {
         $file = trim($file);
         if ($file !== '') {
+            // Under Plesk and similar panels PHP may only read inside the
+            // subscription (open_basedir); say so instead of "unreadable".
+            if (!self::allowedByOpenBasedir($file, (string) ini_get('open_basedir'))) {
+                return array('key' => null, 'problem' => 'outside_open_basedir');
+            }
             $real = realpath($file);
             if ($real === false || !is_file($real) || !is_readable($real)) {
                 return array('key' => null, 'problem' => 'file_unreadable');
@@ -34,13 +39,33 @@ final class AiActionsKey
                 return array('key' => null, 'problem' => 'file_in_webroot');
             }
             $raw = (string) @file_get_contents($real, false, null, 0, 1024);
-            return self::check(trim($raw));
+            // Editors (Plesk's file manager among them) may save a UTF-8 BOM.
+            return self::check(trim(preg_replace('/^\xEF\xBB\xBF/', '', $raw) ?? ''));
         }
         $env = getenv('ANTHROPIC_API_KEY');
         if (is_string($env) && trim($env) !== '') {
             return self::check(trim($env));
         }
         return array('key' => null, 'problem' => 'no_key');
+    }
+
+    /**
+     * Whether open_basedir lets PHP read $file. Empty setting: no limit.
+     * Public for the unit tests.
+     */
+    public static function allowedByOpenBasedir(string $file, string $setting): bool
+    {
+        if (trim($setting) === '') {
+            return true;
+        }
+        $file = str_replace('\\', '/', $file);
+        foreach (explode(PATH_SEPARATOR, $setting) as $dir) {
+            $dir = rtrim(str_replace('\\', '/', trim($dir)), '/');
+            if ($dir !== '' && ($file === $dir || strncmp($file, $dir . '/', strlen($dir) + 1) === 0)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Public for the unit tests. */

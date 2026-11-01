@@ -34,6 +34,7 @@ First release.
 - Limits per agent and day: messages (default 100) and tokens (default 500,000), 0 for none. A message is counted before the model is called; tokens are added from the API's usage. One message at a time per agent (MySQL named lock). The thread length the AI reads is a setting (2,000 to 50,000 characters).
 - Undo for 30 seconds after a run: puts every changed field back in reverse order (status first, transfer back before the rest), with the same permission checks, plus an internal note "AI action undone". The old values stay on the server; the model learns about the undo in its next turn.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
+- The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
 [Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/tag/v0.1.0

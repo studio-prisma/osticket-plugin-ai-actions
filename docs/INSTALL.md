@@ -49,6 +49,15 @@ Check, as the web server user:
 sudo -u www-data head -c 7 /etc/osticket-ai/anthropic.key; echo   # prints: sk-ant-
 ```
 
+**On Plesk** (or another panel with `open_basedir`) PHP may only read inside the subscription; `/etc/…` is off limits there. The right place is the subscription's `private` folder, which the web server never serves:
+
+1. Plesk → Websites & Domains → Files → folder `private` (next to `httpdocs`)
+2. New file `anthropic.key`, paste the key, save. A line break or a BOM at the start doesn't matter
+3. File permissions: `600` (only the subscription user PHP runs as)
+4. In the plugin settings: `/var/www/vhosts/<your-domain>/private/anthropic.key`
+
+Check over SSH: `sudo -u <subscription-user> head -c 7 /var/www/vhosts/<your-domain>/private/anthropic.key; echo` prints `sk-ant-`. Under Plesk → PHP Settings, `open_basedir` must keep its default `{WEBSPACEROOT}{/}{:}{TMP}{/}` (or otherwise include the `private` folder).
+
 Stop if: the check fails, or the only place you can write is inside the osTicket directory. The plugin refuses key files there (anything under the web root can end up in a backup or a download).
 
 Alternative: set `ANTHROPIC_API_KEY` in the web server's environment (PHP-FPM pool `env[ANTHROPIC_API_KEY]`, Apache `SetEnv`) and leave the key file setting empty. Never put the key into the plugin settings or a file in the repository.
@@ -107,7 +116,7 @@ Stop if:
 | You see | Cause |
 |---|---|
 | no bubble | instance not enabled, or your primary role isn't selected |
-| "The AI connection is not set up" | key not found. The PHP error log has `ai-actions: no usable API key (<reason>)`: `file_unreadable` (path or permissions), `file_in_webroot`, `bad_format` (more than the key in the file), `no_key` |
+| "The AI connection is not set up" | key not found. The PHP error log has `ai-actions: no usable API key (<reason>)`: `file_unreadable` (path or permissions), `outside_open_basedir` (the file is outside what PHP may read; on Plesk use the `private` folder), `file_in_webroot`, `bad_format` (more than the key in the file), `no_key` |
 | "The AI is not reachable right now" | outbound HTTPS to `api.anthropic.com` blocked, or Anthropic overloaded; the log has `model call failed (unavailable) HTTP <code>` |
 
 ---

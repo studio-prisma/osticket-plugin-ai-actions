@@ -49,6 +49,15 @@ Prüfung, als Webserver-Benutzer:
 sudo -u www-data head -c 7 /etc/osticket-ai/anthropic.key; echo   # gibt aus: sk-ant-
 ```
 
+**Unter Plesk** (oder einem anderen Panel mit `open_basedir`) darf PHP nur im Verzeichnis des Abos lesen, `/etc/…` ist dort gesperrt. Der richtige Ort ist der Ordner `private` des Abos, den der Webserver nie ausliefert:
+
+1. Plesk → Websites & Domains → Dateien → Ordner `private` (neben `httpdocs`)
+2. Neue Datei `anthropic.key`, Key einfügen, speichern. Ein Zeilenumbruch oder ein BOM am Anfang stört nicht
+3. Rechte der Datei: `600` (nur der Abo-Benutzer, unter dem PHP läuft)
+4. In den Plugin-Einstellungen: `/var/www/vhosts/<deine-domain>/private/anthropic.key`
+
+Prüfung per SSH: `sudo -u <abo-benutzer> head -c 7 /var/www/vhosts/<deine-domain>/private/anthropic.key; echo` gibt `sk-ant-` aus. Unter Plesk → PHP-Einstellungen muss `open_basedir` den Standard `{WEBSPACEROOT}{/}{:}{TMP}{/}` behalten (oder den `private`-Ordner sonst einschließen).
+
 Abbruch, wenn: die Prüfung scheitert, oder du nur innerhalb des osTicket-Verzeichnisses schreiben kannst. Dort lehnt das Plugin Key-Dateien ab (alles unter dem Webroot kann in einem Backup oder Download landen).
 
 Alternative: `ANTHROPIC_API_KEY` in der Umgebung des Webservers setzen (PHP-FPM-Pool `env[ANTHROPIC_API_KEY]`, Apache `SetEnv`) und die Einstellung „API key file“ leer lassen. Den Key nie in die Plugin-Einstellungen oder in eine Datei im Repository schreiben.
@@ -107,7 +116,7 @@ Abbruch, wenn:
 | Du siehst | Ursache |
 |---|---|
 | keine Bubble | Instanz nicht aktiv, oder deine Hauptrolle ist nicht ausgewählt |
-| „Die AI-Anbindung ist nicht eingerichtet“ | Key nicht gefunden. Im PHP-Fehlerlog steht `ai-actions: no usable API key (<Grund>)`: `file_unreadable` (Pfad oder Rechte), `file_in_webroot`, `bad_format` (mehr als der Key in der Datei), `no_key` |
+| „Die AI-Anbindung ist nicht eingerichtet“ | Key nicht gefunden. Im PHP-Fehlerlog steht `ai-actions: no usable API key (<Grund>)`: `file_unreadable` (Pfad oder Rechte), `outside_open_basedir` (Datei liegt außerhalb dessen, was PHP lesen darf, unter Plesk: `private`-Ordner nehmen), `file_in_webroot`, `bad_format` (mehr als der Key in der Datei), `no_key` |
 | „Die AI ist gerade nicht erreichbar“ | ausgehendes HTTPS zu `api.anthropic.com` gesperrt, oder Anthropic überlastet; im Log steht `model call failed (unavailable) HTTP <Code>` |
 
 ---
