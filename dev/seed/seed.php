@@ -181,9 +181,15 @@ q(sprintf("INSERT INTO %s (plugin_id, flags, name, notes, created, updated) VALU
     PLUGIN_INSTANCE_TABLE, $pid));
 $iid = (int) db_insert_id();
 $ns = sprintf('plugin.%d.instance.%d', $pid, $iid);
-foreach (array('enabled' => '1') as $k => $v) {
-    q(sprintf("INSERT INTO %s (namespace, `key`, value, updated) VALUES ('%s', '%s', '%s', NOW())",
-        CONFIG_TABLE, $ns, $k, $v));
+// Field for "All Access" and "Expanded Access"; salesagent ("View only")
+// must not see it.
+$roles = array();
+foreach (array('All Access', 'Expanded Access') as $name) {
+    $roles[(int) scalar(sprintf("SELECT id FROM %s WHERE name=%s", ROLE_TABLE, db_input($name)))] = $name;
+}
+foreach (array('enabled' => '1', 'roles' => json_encode($roles)) as $k => $v) {
+    q(sprintf("INSERT INTO %s (namespace, `key`, value, updated) VALUES ('%s', '%s', %s, NOW())",
+        CONFIG_TABLE, $ns, $k, db_input($v)));
 }
 
 // Optional local additions, mounted by dev/local/compose.override.yml.

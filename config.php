@@ -34,6 +34,28 @@ class AiActionsConfig extends PluginConfig
                             . 'agent\'s own permissions and an explicit confirmation.',
                 ),
             )),
+
+            'roles' => new ChoiceField(array(
+                'label'         => 'Agents with these primary roles',
+                'default'       => '',
+                'choices'       => self::roles(),
+                'hint'          => 'Only agents whose primary role is selected see the field. '
+                                 . 'Nothing selected means nobody.',
+                'configuration' => array('multiselect' => true, 'prompt' => 'None'),
+            )),
         );
+    }
+
+    /** @return array<int, string> role ID => name */
+    private static function roles(): array
+    {
+        $out = array();
+        if (!class_exists('Role')) {
+            return $out;
+        }
+        foreach (Role::objects()->order_by('name') as $role) {
+            $out[(int) $role->getId()] = (string) $role->getName();
+        }
+        return $out;
     }
 }

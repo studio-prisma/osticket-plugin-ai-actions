@@ -43,6 +43,63 @@ jobs:
       - name: Unit tests
         run: php tests/unit.php
 
+  js:
+    name: JavaScript syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: node --check
+        run: node --check assets/ai-actions.js
+
+  e2e:
+    name: End-to-end (osTicket 1.18.4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+
+      - name: Start test stack
+        run: ./dev/up.sh
+
+      - name: Install Playwright
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run suite
+        working-directory: tests/e2e
+        run: npx playwright test
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            dev/local/e2e-report
+            dev/local/e2e-results
+          retention-days: 7
+
+      - name: Stop test stack
+        if: always()
+        run: ./dev/down.sh
+
   actionlint:
     name: Workflow lint
     runs-on: ubuntu-latest
@@ -59,7 +116,7 @@ jobs:
   gate:
     name: Gate
     runs-on: ubuntu-latest
-    needs: [lint, actionlint]
+    needs: [lint, js, e2e, actionlint]
     if: always()
     steps:
       - name: Fail unless every job succeeded
@@ -69,5 +126,7 @@ jobs:
           contains(needs.*.result, 'skipped')
         run: |
           echo "lint=${{ needs.lint.result }}"
+          echo "js=${{ needs.js.result }}"
+          echo "e2e=${{ needs.e2e.result }}"
           echo "actionlint=${{ needs.actionlint.result }}"
           exit 1
