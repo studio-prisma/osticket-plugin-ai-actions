@@ -3,10 +3,30 @@
  *
  * Layering: above the board's drawer (z-index 8) and toasts, below the core
  * dialogs (10), so osTicket's own popups still open on top.
+ *
+ * Theming: every colour is a custom property, declared with :where() so it
+ * has no specificity. A theme overrides them with any selector, e.g.
+ *
+ *   .spa-ai-launcher, .spa-ai-panel { --spa-accent: #330066; }
+ *   :root.dark .spa-ai-launcher, :root.dark .spa-ai-panel { --spa-surface: #1e1a26; ... }
+ *
+ *   --spa-accent       bubble, own messages, primary buttons, focus ring
+ *   --spa-accent-ink   text on --spa-accent
+ *   --spa-ink          text
+ *   --spa-muted        secondary text
+ *   --spa-line         borders
+ *   --spa-surface      window and card background
+ *   --spa-soft         AI messages, hover
+ *   --spa-field        input background
+ *   --spa-ok / --spa-fail / --spa-fail-soft   results and errors
+ *   --spa-shadow       window shadow
+ *
+ * Controls are scoped under .spa-ai-panel: osTicket's scp.css styles
+ * button[type=submit] (grey, inset border) with more specificity than a
+ * single class.
  */
 
-.spa-ai-launcher,
-.spa-ai-panel {
+:where(.spa-ai-launcher, .spa-ai-panel) {
   --spa-accent: #4f46e5;
   --spa-accent-ink: #ffffff;
   --spa-ink: #1f2330;
@@ -14,8 +34,15 @@
   --spa-line: #e4e6ec;
   --spa-surface: #ffffff;
   --spa-soft: #f4f5f8;
+  --spa-field: #ffffff;
   --spa-ok: #15803d;
   --spa-fail: #b91c1c;
+  --spa-fail-soft: #fef2f2;
+  --spa-shadow: 0 18px 48px rgba(31, 35, 48, 0.22);
+}
+
+.spa-ai-launcher,
+.spa-ai-panel {
   font-family: inherit;
   box-sizing: border-box;
 }
@@ -59,8 +86,11 @@
   outline-offset: 2px;
 }
 
-.spa-ai-launcher-open {
-  background: var(--spa-ink);
+/* Open: the bubble takes the window's colours, so it reads as "close". */
+.spa-ai-launcher.spa-ai-launcher-open {
+  background: var(--spa-surface);
+  color: var(--spa-ink);
+  box-shadow: 0 0 0 1px var(--spa-line), 0 6px 20px rgba(31, 35, 48, 0.25);
 }
 
 /* ---------------------------------------------------------------- window */
@@ -80,7 +110,7 @@
   color: var(--spa-ink);
   border: 1px solid var(--spa-line);
   border-radius: 14px;
-  box-shadow: 0 18px 48px rgba(31, 35, 48, 0.22);
+  box-shadow: var(--spa-shadow);
   overflow: hidden;
   font-size: 13px;
   line-height: 1.45;
@@ -113,7 +143,7 @@
   font-size: 12px;
 }
 
-.spa-ai-icon-btn {
+.spa-ai-panel .spa-ai-icon-btn {
   border: 1px solid transparent;
   background: transparent;
   color: var(--spa-muted);
@@ -123,12 +153,12 @@
   font-size: 12px;
 }
 
-.spa-ai-icon-btn:hover {
+.spa-ai-panel .spa-ai-icon-btn:hover {
   background: var(--spa-soft);
   color: var(--spa-ink);
 }
 
-.spa-ai-close {
+.spa-ai-panel .spa-ai-close {
   font-size: 20px;
   line-height: 1;
   padding: 2px 8px;
@@ -203,7 +233,7 @@
 
 .spa-ai-error {
   color: var(--spa-fail);
-  background: #fef2f2;
+  background: var(--spa-fail-soft);
   border-radius: 8px;
   padding: 8px 10px;
 }
@@ -271,24 +301,33 @@
   margin-top: 10px;
 }
 
-.spa-ai-run,
-.spa-ai-discard,
-.spa-ai-send {
+.spa-ai-panel .spa-ai-run,
+.spa-ai-panel .spa-ai-discard,
+.spa-ai-panel .spa-ai-send {
   border-radius: 8px;
   padding: 6px 12px;
+  margin: 0;
+  height: auto;
+  min-height: 0;
+  font-family: inherit;
   font-size: 13px;
+  line-height: 1.4;
+  text-transform: none;
+  text-shadow: none;
+  background-image: none;
+  box-shadow: none;
   cursor: pointer;
 }
 
-.spa-ai-run,
-.spa-ai-send {
+.spa-ai-panel .spa-ai-run,
+.spa-ai-panel .spa-ai-send {
   border: 1px solid var(--spa-accent);
   background: var(--spa-accent);
   color: var(--spa-accent-ink);
   font-weight: 600;
 }
 
-.spa-ai-discard {
+.spa-ai-panel .spa-ai-discard {
   border: 1px solid var(--spa-line);
   background: var(--spa-surface);
   color: var(--spa-ink);
@@ -310,9 +349,14 @@
   border-top: 1px solid var(--spa-line);
 }
 
-.spa-ai-input {
+.spa-ai-panel .spa-ai-input {
   flex: 1;
+  width: auto;
+  margin: 0;
   resize: none;
+  background: var(--spa-field);
+  color: var(--spa-ink);
+  box-shadow: none;
   border: 1px solid var(--spa-line);
   border-radius: 10px;
   padding: 8px 10px;
@@ -321,8 +365,8 @@
   min-height: 36px;
 }
 
-.spa-ai-send:disabled,
-.spa-ai-input:disabled {
+.spa-ai-panel .spa-ai-send:disabled,
+.spa-ai-panel .spa-ai-input:disabled {
   opacity: 0.55;
   cursor: default;
 }

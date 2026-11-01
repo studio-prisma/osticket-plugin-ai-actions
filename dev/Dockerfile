@@ -32,4 +32,9 @@ RUN printf 'sendmail_path = "/usr/bin/msmtp -t --host=mail --port=1025 --from=he
       > /usr/local/etc/php/conf.d/mail.ini \
  && sed -ri 's#AllowOverride None#AllowOverride All#g' /etc/apache2/apache2.conf
 
+# Bind mounts from Docker Desktop: with sendfile/mmap, Apache can serve a
+# changed file with its old content (same length, stale bytes). Static files
+# from mounted folders (a theme in assets/custom/css) must be read fresh.
+RUN printf 'EnableSendfile Off\nEnableMMAP Off\n' > /etc/apache2/conf-enabled/zz-dev-mounts.conf
+
 WORKDIR /var/www/html
