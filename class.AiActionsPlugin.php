@@ -25,6 +25,7 @@ require_once INCLUDE_DIR . 'class.dispatcher.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/src/AiActionsI18n.php';
 require_once __DIR__ . '/src/AiActionsTools.php';
+require_once __DIR__ . '/src/AiActionsChoices.php';
 require_once __DIR__ . '/src/AiActionsLlm.php';
 require_once __DIR__ . '/src/AiActionsKey.php';
 require_once __DIR__ . '/src/AiActionsClaude.php';

@@ -140,11 +140,13 @@ final class AiActionsController
 
         $t = AiActionsI18n::strings(self::language($thisstaff));
         $context = self::context($thisstaff, $ticket, $chat['seen_entry']);
+        $choices = AiActionsChoices::forTicket($ticket, $thisstaff);
+        $context['options'] = AiActionsChoices::render($choices);
         $blocks = $chat['messages']
-            ? AiActionsPlanner::nextMessage($context['data'], $chat['pending'], $prompt)
+            ? AiActionsPlanner::nextMessage($context['data'], $chat['pending'], $prompt, $context['options'])
             : AiActionsPlanner::firstMessage($context, $prompt);
         try {
-            $result = (new AiActionsPlanner($llm))->turn(AiActionsPlanner::system($context), $chat['messages'], $blocks);
+            $result = (new AiActionsPlanner($llm, $choices))->turn(AiActionsPlanner::system($context), $chat['messages'], $blocks);
         } catch (AiActionsLlmError $e) {
             // Status and error type only: the detail never carries the key or the prompt.
             error_log(sprintf('ai-actions: model call failed (%s) %s', $e->kind, $e->getMessage()));
@@ -152,9 +154,11 @@ final class AiActionsController
             return self::json(422, array('error' => $code));
         }
 
+        // Stored and shown in the order they will run, so preview line i is result i.
+        $result['changes'] = AiActionsTools::inRunOrder($result['changes']);
         $preview = array();
         foreach ($result['changes'] as $c) {
-            $preview[] = AiActionsTools::summary($c['action'], $c['input'], $t);
+            $preview[] = AiActionsTools::summary($c['action'], $c['input'], $t, $choices);
         }
         $planId = $result['changes'] ? AiActionsRunStore::create($staffId, $ticketId, $prompt, $result['changes']) : null;
 
@@ -195,14 +199,19 @@ final class AiActionsController
 
         $t = AiActionsI18n::strings(self::language($thisstaff));
         $results = array();
-        foreach ($run['changes'] as $c) {
-            $input = AiActionsTools::validate((string) ($c['action'] ?? ''), $c['input'] ?? null);
+        $assigned = false;
+        foreach (AiActionsTools::inRunOrder($run['changes']) as $c) {
+            // Checked again against what the agent may choose now: the
+            // ticket or the agent's rights may have changed since the plan.
+            $choices = AiActionsChoices::forTicket($ticket, $thisstaff);
+            $input = AiActionsTools::validate((string) ($c['action'] ?? ''), $c['input'] ?? null, $choices);
             $line = $input !== null
-                ? AiActionsTools::summary($c['action'], $input, $t)
-                : array('label' => (string) ($c['action'] ?? ''), 'value' => '');
+                ? AiActionsTools::summary($c['action'], $input, $t, $choices)
+                : array('label' => $t['labels'][$c['action'] ?? ''] ?? (string) ($c['action'] ?? ''), 'value' => '');
             $r = $input !== null
-                ? AiActionsExecutor::run($ticket, $thisstaff, $c['action'], $input)
+                ? AiActionsExecutor::run($ticket, $thisstaff, $c['action'], $input, $assigned)
                 : array('ok' => false, 'error' => 'rejected');
+            $assigned = $assigned || ($r['ok'] && in_array($c['action'], array('assign_agent', 'assign_team'), true));
             $results[] = $line + array(
                 'ok'      => $r['ok'],
                 'error'   => $r['error'] ?? null,

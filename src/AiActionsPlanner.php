@@ -20,9 +20,13 @@ final class AiActionsPlanner
     /** @var AiActionsLlm */
     private $llm;
 
-    public function __construct(AiActionsLlm $llm)
+    /** @var array|null see AiActionsChoices; null = format checks only */
+    private $choices;
+
+    public function __construct(AiActionsLlm $llm, ?array $choices = null)
     {
         $this->llm = $llm;
+        $this->choices = $choices;
     }
 
     /**
@@ -111,9 +115,12 @@ final class AiActionsPlanner
      *
      * @param array $outcomes list of ['state' => done|discarded|expired|superseded, 'results' => [...]]
      */
-    public static function nextMessage(string $data, array $outcomes, string $prompt): array
+    public static function nextMessage(string $data, array $outcomes, string $prompt, string $options = ''): array
     {
         $blocks = array(array('type' => 'text', 'text' => $data));
+        if ($options !== '') {
+            $blocks[] = array('type' => 'text', 'text' => $options);
+        }
         if ($outcomes) {
             $blocks[] = array('type' => 'text', 'text' => "<plan_result>\n" . self::outcomeText($outcomes) . "\n</plan_result>");
         }
@@ -156,10 +163,10 @@ final class AiActionsPlanner
             $rejected++;
             return self::result($id, 'Unknown tool.', true);
         }
-        $input = AiActionsTools::validate($name, $block['input'] ?? null);
+        $input = AiActionsTools::validate($name, $block['input'] ?? null, $this->choices);
         if ($input === null) {
             $rejected++;
-            return self::result($id, 'Invalid input, nothing was queued.', true);
+            return self::result($id, 'Invalid input or a value not listed in <ticket_options>. Nothing was queued.', true);
         }
         if (count($changes) >= self::MAX_CHANGES) {
             $rejected++;
@@ -185,8 +192,10 @@ final class AiActionsPlanner
     public static function firstMessage(array $c, string $prompt): array
     {
         $blocks = array();
-        if (($c['data'] ?? '') !== '') {
-            $blocks[] = array('type' => 'text', 'text' => (string) $c['data']);
+        foreach (array('data', 'options') as $part) {
+            if (($c[$part] ?? '') !== '') {
+                $blocks[] = array('type' => 'text', 'text' => (string) $c[$part]);
+            }
         }
         $blocks[] = array('type' => 'text', 'text' => "<agent_request>\n" . $prompt . "\n</agent_request>");
         return $blocks;
@@ -202,7 +211,9 @@ final class AiActionsPlanner
             . "This is a conversation about one ticket. Each later message brings the current ticket facts, "
             . "new thread entries and, inside <plan_result>, what happened to your previous plan.\n\n"
             . "Changes you plan with tools are only queued. The agent sees a preview and decides.\n"
-            . "Plan only what the agent asked for. If the request is ambiguous, ask instead of guessing.\n"
+            . "Plan only what the agent asked for. If the request is ambiguous, ask instead of guessing: "
+            . "for example when two agents in <ticket_options> match a name. Values for the tools come "
+            . "only from <ticket_options>; if what the agent wants is not listed there, say so.\n"
             . "Answer in the language of the agent's request, briefly and in plain text, without emoji. "
             . "In German, address the agent informally (du). A planned change is not done yet: "
             . "say it is planned (\"vorgemerkt\"), never that you set or changed it, until a <plan_result> "

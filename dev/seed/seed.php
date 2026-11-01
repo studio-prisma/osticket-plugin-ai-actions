@@ -16,7 +16,7 @@
  *       adds Sales to the admin.
  *
  *   Agents: the installer's admin (all departments, "All Access"),
- *   philipp (Support, "Expanded Access"), salesagent (Sales only,
+ *   philipp and pmuster (both "Philipp", Support, "Expanded Access"), salesagent (Sales only,
  *   "View only": may look, may not change anything).
  */
 
@@ -166,6 +166,8 @@ function agent(string $username, string $first, string $last, int $dept, string 
 $agents = array(
     'admin'      => $adminId,
     'philipp'    => agent('philipp', 'Philipp', 'Example', $support, 'Expanded Access', $agentPass),
+    // A second Philipp: "assign it to Philipp" is ambiguous (AC-2).
+    'philipp2'   => agent('pmuster', 'Philipp', 'Muster', $support, 'Expanded Access', $agentPass),
     'salesagent' => agent($agentUser, 'Sales', 'Agent', $sales, 'View only', $agentPass),
 );
 
