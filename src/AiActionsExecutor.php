@@ -37,6 +37,79 @@ final class AiActionsExecutor
         return self::fail('rejected');
     }
 
+    /**
+     * Puts back what one change replaced, with the permission check of the
+     * same dialog. `$previous` is what run() returned for that change.
+     *
+     * @return array{ok:bool, error?:string, message?:string}
+     */
+    public static function undo($ticket, $staff, string $action, $previous): array
+    {
+        switch ($action) {
+            case 'set_due_date':
+                return self::undoDueDate($ticket, $staff, $previous['duedate'] ?? null);
+            case 'set_priority':
+                $p = (string) ($previous['priority'] ?? '');
+                return $p === '' ? self::fail('rejected') : self::priority($ticket, $staff, $p);
+            case 'assign_agent':
+            case 'assign_team':
+                return self::undoAssign($ticket, $staff, (int) ($previous['staff'] ?? 0), (int) ($previous['team'] ?? 0));
+            case 'transfer':
+                return self::transfer($ticket, $staff, (string) (int) $previous);
+            case 'set_status':
+                // Back to the old status; reopening must not hand the ticket to whoever undoes.
+                return self::status($ticket, $staff, (string) (int) $previous, true);
+        }
+        return self::fail('rejected');
+    }
+
+    /**
+     * Sets the stored due date directly: the edit form refuses dates in the
+     * past, and the old one may well be in the past by now.
+     */
+    private static function undoDueDate($ticket, $staff, $previous): array
+    {
+        if (!$ticket->checkStaffPerm($staff, Ticket::PERM_EDIT)) {
+            return self::fail('forbidden');
+        }
+        $previous = is_string($previous) && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/', $previous) ? $previous : null;
+        $ticket->duedate = $previous;
+        if (!$ticket->save()) {
+            return self::fail('rejected');
+        }
+        return array('ok' => true);
+    }
+
+    /** Back to the previous agent and team, or unassigned (TicketsAjaxAPI::release()). */
+    private static function undoAssign($ticket, $staff, int $agentId, int $teamId): array
+    {
+        if ($agentId === 0 && $teamId === 0) {
+            if (!$ticket->checkStaffPerm($staff, Ticket::PERM_RELEASE) && !$staff->isManager()) {
+                return self::fail('forbidden');
+            }
+            $vars = array();
+            if ($agent = $ticket->getStaff()) {
+                $vars['sid'] = array($agent->getId());
+            }
+            if ($team = $ticket->getTeam()) {
+                $vars['tid'] = array($team->getId());
+            }
+            $errors = array();
+            if ($vars && !$ticket->release($vars, $errors)) {
+                return self::fail('rejected', $errors);
+            }
+            return array('ok' => true);
+        }
+        $r = array('ok' => true);
+        if ($agentId) {
+            $r = self::assign($ticket, $staff, 'agents', 's' . $agentId);
+        }
+        if ($r['ok'] && $teamId) {
+            $r = self::assign($ticket, $staff, 'teams', 't' . $teamId);
+        }
+        return $r;
+    }
+
     /** TicketsAjaxAPI::editField() for the due date field. */
     private static function dueDate($ticket, $staff, string $due): array
     {
@@ -158,7 +231,7 @@ final class AiActionsExecutor
         }
         $previous = (int) $ticket->getStatusId();
         if ($previous === (int) $status->getId()) {
-            return array('ok' => true, 'previous' => $previous);
+            return array('ok' => true, 'unchanged' => true, 'previous' => $previous);
         }
         $errors = array();
         if (!$ticket->setStatus($status, '', $errors, !$keepAssignee)) {

@@ -13,6 +13,9 @@ final class AiActionsRunStore
 {
     public const TTL = 600;
 
+    /** Seconds after a run in which it can be undone (spec AC-7). */
+    public const UNDO_WINDOW = 30;
+
     /** Rows older than this are deleted; the ticket keeps its own note. */
     public const KEEP_DAYS = 2;
 
@@ -44,9 +47,15 @@ final class AiActionsRunStore
             `result` MEDIUMTEXT NULL,
             `created` DATETIME NOT NULL,
             `expires` DATETIME NOT NULL,
+            `ran` DATETIME NULL,
             PRIMARY KEY (`id`),
             KEY `staff_created` (`staff_id`, `created`)
         ) DEFAULT CHARSET=utf8mb4", self::table()));
+        // Tables from before undo existed lack `ran`.
+        $res = db_query(sprintf("SHOW COLUMNS FROM `%s` LIKE 'ran'", self::table()));
+        if ($res && !db_num_rows($res)) {
+            db_query(sprintf("ALTER TABLE `%s` ADD COLUMN `ran` DATETIME NULL", self::table()));
+        }
         self::$ready = true;
     }
 
@@ -123,10 +132,50 @@ final class AiActionsRunStore
         return $row ? (int) $row[0] : null;
     }
 
+    /** @param array $results per change, including `previous` for undo (server-side only) */
     public static function finish(string $id, array $results): void
     {
-        db_query(sprintf("UPDATE `%s` SET state='done', result=%s WHERE id='%s'",
+        db_query(sprintf("UPDATE `%s` SET state='done', result=%s, ran=NOW() WHERE id='%s'",
             self::table(), self::ascii($results), $id));
+    }
+
+    /**
+     * Locks a run for undo and returns it, or null if it isn't this agent's,
+     * didn't run, was undone already or is older than UNDO_WINDOW.
+     *
+     * @return array{id:string, ticket_id:int, prompt:string, results:array}|null
+     */
+    public static function claimUndo(string $id, int $staffId): ?array
+    {
+        if (!self::isId($id)) {
+            return null;
+        }
+        self::ensure();
+        db_query(sprintf(
+            "UPDATE `%s` SET state='undoing' WHERE id='%s' AND staff_id=%d AND state='done'
+             AND ran > NOW() - INTERVAL %d SECOND",
+            self::table(), $id, $staffId, self::UNDO_WINDOW));
+        if (db_affected_rows() !== 1) {
+            return null;
+        }
+        $res = db_query(sprintf("SELECT ticket_id, prompt, result FROM `%s` WHERE id='%s'", self::table(), $id));
+        $row = $res ? db_fetch_array($res) : null;
+        if (!$row) {
+            return null;
+        }
+        $results = json_decode((string) $row['result'], true);
+        return array(
+            'id'        => $id,
+            'ticket_id' => (int) $row['ticket_id'],
+            'prompt'    => (string) json_decode((string) $row['prompt'], true),
+            'results'   => is_array($results) ? $results : array(),
+        );
+    }
+
+    public static function finishUndo(string $id, array $runResults, array $undoResults): void
+    {
+        db_query(sprintf("UPDATE `%s` SET state='undone', result=%s WHERE id='%s'",
+            self::table(), self::ascii(array('run' => $runResults, 'undo' => $undoResults)), $id));
     }
 
     /**

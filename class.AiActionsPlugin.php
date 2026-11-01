@@ -96,6 +96,9 @@ class AiActionsPlugin extends Plugin
         $dispatcher->append(url_get('^/ai/chat$', static function () {
             return AiActionsController::chat();
         }));
+        $dispatcher->append(url_post('^/ai/undo$', static function () {
+            return AiActionsController::undo();
+        }));
         $dispatcher->append(url_post('^/ai/discard$', static function () {
             return AiActionsController::discard();
         }));

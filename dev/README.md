@@ -44,6 +44,18 @@ The seed points the plugin at `/run/secrets/anthropic.key`. Without the mount, t
 
 Use a key from a separate workspace with a low spend limit. Never put the key into the repository or into `dev/local/credentials.env`.
 
+## A second stack
+
+Two stacks can run side by side, e.g. one live for clicking around and one with the fake for the suite. Each has its own folder, project name and ports:
+
+```bash
+SPA_LOCAL=dev/local-2 SPA_PROJECT=spa-dev-2 SPA_HTTP_PORT=8090 SPA_MAIL_PORT=8028 ./dev/up.sh
+(cd tests/e2e && SPA_LOCAL=../../dev/local-2 npx playwright test)
+SPA_LOCAL=dev/local-2 ./dev/down.sh
+```
+
+The variables are read once, when `credentials.env` is created in that folder; afterwards the file decides. `dev/local-*/` is git-ignored. Copy `compose.override.yml` into the new folder if the second stack needs the same mounts.
+
 ## Mounting other plugins
 
 Create `dev/local/compose.override.yml`. `up.sh` picks it up automatically. Relative paths resolve against `dev/`:

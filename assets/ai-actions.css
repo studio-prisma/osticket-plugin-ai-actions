@@ -380,3 +380,42 @@
 .spa-ai-foot:empty {
   display: none;
 }
+
+/* ------------------------------------------------------------------ undo */
+
+.spa-ai-plan-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.spa-ai-plan-foot .spa-ai-plan-state {
+  margin-top: 0;
+}
+
+.spa-ai-plan-undo {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--spa-line);
+}
+
+.spa-ai-panel .spa-ai-undo {
+  border: 1px solid var(--spa-line);
+  background: var(--spa-surface);
+  color: var(--spa-ink);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: none;
+  background-image: none;
+  cursor: pointer;
+}
+
+.spa-ai-panel .spa-ai-undo:hover {
+  background: var(--spa-soft);
+}

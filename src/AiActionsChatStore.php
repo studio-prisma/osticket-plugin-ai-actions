@@ -88,39 +88,59 @@ final class AiActionsChatStore
      * Records what happened to a plan, for the chat window and for the
      * model's next turn. Does nothing if the conversation is gone.
      *
-     * @param string $state done, discarded or expired
+     * @param string $state done, discarded, expired or undone
+     * @param array|null $results what the chat shows per change; null keeps the earlier ones (undo)
+     * @param array $extra more plan fields, e.g. undo_until or undo
      */
-    public static function planOutcome(int $staffId, int $ticketId, string $planId, string $state, array $results = array()): void
+    public static function planOutcome(int $staffId, int $ticketId, string $planId, string $state,
+                                       ?array $results = array(), array $extra = array()): void
     {
         $chat = self::load($staffId, $ticketId);
         if (!$chat['transcript']) {
             return;
         }
-        $chat['transcript'] = self::markPlan($chat['transcript'], $planId, $state, $results);
-        $chat['pending'][] = array('state' => $state, 'results' => $results);
+        $chat['transcript'] = self::markPlan($chat['transcript'], $planId, $state, $results, $extra);
+        $chat['pending'][] = array('state' => $state, 'results' => $state === 'undone' ? ($extra['undo'] ?? array()) : (array) $results);
         self::save($staffId, $ticketId, $chat);
     }
 
     /** Public for the unit tests. */
-    public static function markPlan(array $transcript, string $planId, string $state, array $results): array
+    public static function markPlan(array $transcript, string $planId, string $state, ?array $results, array $extra = array()): array
     {
         foreach ($transcript as &$item) {
             if (($item['plan']['id'] ?? null) === $planId) {
                 $item['plan']['state'] = $state;
-                $item['plan']['results'] = $results;
+                if ($results !== null) {
+                    $item['plan']['results'] = $results;
+                }
+                unset($item['plan']['undo_until']);
+                $item['plan'] = $extra + $item['plan'];
             }
         }
         unset($item);
         return $transcript;
     }
 
-    /** The transcript as the browser gets it: plan IDs only while a plan can still run. */
-    public static function forClient(array $transcript): array
+    /**
+     * The transcript as the browser gets it: a plan's ID only while it can
+     * still run, or be undone.
+     */
+    public static function forClient(array $transcript, ?int $now = null): array
     {
+        $now = $now ?? time();
         $out = array();
         foreach ($transcript as $item) {
-            if (isset($item['plan']) && ($item['plan']['state'] ?? '') !== 'open') {
-                unset($item['plan']['id']);
+            if (isset($item['plan'])) {
+                $state = $item['plan']['state'] ?? '';
+                $undoable = $state === 'done' && (int) ($item['plan']['undo_until'] ?? 0) > $now;
+                if ($state !== 'open' && !$undoable) {
+                    unset($item['plan']['id']);
+                }
+                // Seconds left instead of a timestamp: the browser's clock may be off.
+                if ($undoable) {
+                    $item['plan']['undo_left'] = (int) $item['plan']['undo_until'] - $now;
+                }
+                unset($item['plan']['undo_until']);
             }
             $out[] = $item;
         }

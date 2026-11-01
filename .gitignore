@@ -36,3 +36,6 @@ vendor-scoped/
 
 # E2E
 node_modules/
+
+# Second test stacks (SPA_LOCAL=dev/local-2 ./dev/up.sh)
+dev/local-*/

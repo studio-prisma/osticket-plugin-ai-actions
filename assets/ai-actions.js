@@ -160,7 +160,7 @@
     state.transcript.forEach(function (item) { log.appendChild(message(item)); });
     if (state.busy) {
       var dots = el('div', 'spa-ai-msg spa-ai-msg-ai spa-ai-busy');
-      dots.appendChild(el('span', 'spa-ai-dots', state.busy === 'run' ? t.running : t.thinking));
+      dots.appendChild(el('span', 'spa-ai-dots', state.busy === 'run' ? t.running : state.busy === 'undo' ? t.undoing : t.thinking));
       log.appendChild(dots);
     }
     if (state.error) log.appendChild(el('div', 'spa-ai-error', state.error));
@@ -197,10 +197,48 @@
       actions.appendChild(button('spa-ai-run', t.run, function () { run(plan.id); }));
       actions.appendChild(button('spa-ai-discard', t.discard, function () { discard(plan.id); }));
       card.appendChild(actions);
-    } else {
-      card.appendChild(el('div', 'spa-ai-plan-state', (t.states || {})[plan.state] || plan.state));
+      return card;
     }
+
+    if (plan.undo && plan.undo.length) {
+      var back = el('ul', 'spa-ai-plan-list spa-ai-plan-undo');
+      plan.undo.forEach(function (u) {
+        var li = el('li', u.ok ? 'spa-ai-ok' : 'spa-ai-fail');
+        li.appendChild(el('span', 'spa-ai-plan-label', '↺ ' + u.label));
+        li.appendChild(el('span', 'spa-ai-plan-value', u.value));
+        if (!u.ok) li.appendChild(el('span', 'spa-ai-plan-why', t.failed + ': ' + errorText(u.error)));
+        back.appendChild(li);
+      });
+      card.appendChild(back);
+    }
+
+    var foot = el('div', 'spa-ai-plan-foot');
+    foot.appendChild(el('span', 'spa-ai-plan-state', (t.states || {})[plan.state] || plan.state));
+    if (plan.state === 'done' && plan.id && plan.undo_left > 0) {
+      foot.appendChild(undoButton(plan.id, plan.undo_left));
+    }
+    card.appendChild(foot);
     return card;
+  }
+
+  /** Undo, counting down; at zero it disappears (the server refuses after that anyway). */
+  function undoButton(planId, seconds) {
+    var until = Date.now() + seconds * 1000;
+    var b = button('spa-ai-undo', '', function () { undo(planId); });
+    var timer = 0;
+    function tick(first) {
+      var left = Math.ceil((until - Date.now()) / 1000);
+      // A re-render replaces the card; this button is then gone from the page.
+      if (left <= 0 || (!first && !b.isConnected)) {
+        window.clearInterval(timer);
+        if (b.parentNode) b.parentNode.removeChild(b);
+        return;
+      }
+      b.textContent = (t.undo_left || '%ds').replace('%d', left);
+    }
+    tick(true);
+    timer = window.setInterval(tick, 1000);
+    return b;
   }
 
   // ---------------------------------------------------------------- actions
@@ -273,6 +311,20 @@
   function discard(planId) {
     var id = state.ticket;
     request('POST', '/discard', { plan_id: planId }).catch(fail).then(function () { return load(id); });
+  }
+
+  function undo(planId) {
+    var id = state.ticket;
+    state.busy = 'undo';
+    state.error = '';
+    render();
+    request('POST', '/undo', { plan_id: planId }).then(function (json) {
+      var changed = (json.results || []).some(function (r) { return r.ok; });
+      if (changed) refreshTicket();
+    }).catch(fail).then(function () {
+      state.busy = false;
+      return load(id);
+    });
   }
 
   function reset() {

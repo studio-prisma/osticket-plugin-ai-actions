@@ -416,6 +416,36 @@ check('fake: picks values from the options block',
         array('action' => 'set_status', 'input' => array('status' => '3')),
     ));
 
+// --------------------------------------------------------------------- undo
+
+$full = array(
+    array('label' => 'Due date', 'value' => 'x', 'ok' => true, 'error' => null, 'message' => '',
+          'action' => 'set_due_date', 'unchanged' => false, 'previous' => array('duedate' => null)),
+);
+$pub = AiActionsController::publicResults($full);
+check('undo: old values never leave the server', !isset($pub[0]['previous']) && !isset($pub[0]['action'])
+    && !isset($pub[0]['unchanged']) && $pub[0]['label'] === 'Due date');
+
+$id = str_repeat('c', 32);
+$tr = array(array('role' => 'ai', 'text' => 'ok', 'plan' => array('id' => $id, 'changes' => array(), 'state' => 'open')));
+$tr = AiActionsChatStore::markPlan($tr, $id, 'done', array(array('ok' => true)), array('undo_until' => 1000));
+$c = AiActionsChatStore::forClient($tr, 990);
+check('undo: plan ID and seconds left while undo is possible',
+    $c[0]['plan']['id'] === $id && $c[0]['plan']['undo_left'] === 10 && !isset($c[0]['plan']['undo_until']));
+$c = AiActionsChatStore::forClient($tr, 1000);
+check('undo: nothing after the window', !isset($c[0]['plan']['id']) && !isset($c[0]['plan']['undo_left']));
+$tr = AiActionsChatStore::markPlan($tr, $id, 'undone', null, array('undo' => array(array('label' => 'Due date', 'ok' => true))));
+check('undo: undone keeps run results, adds undo results, closes the window',
+    $tr[0]['plan']['state'] === 'undone' && $tr[0]['plan']['results'] === array(array('ok' => true))
+    && !isset($tr[0]['plan']['undo_until']) && count($tr[0]['plan']['undo']) === 1);
+
+check('undo: the model hears about it', strpos(AiActionsPlanner::outcomeText(array(array('state' => 'undone',
+    'results' => array(array('label' => 'Status', 'value' => 'Closed', 'ok' => true))))),
+    "undid the previous plan right after it ran. Put back:\n- Status: Closed (back to the old value)") !== false);
+check('undo: note lists what was put back', strpos(AiActionsController::undoNoteBody('close it',
+    array(array('label' => 'Status', 'value' => 'Closed', 'ok' => true)), AiActionsI18n::strings('de')),
+    "Anfrage: close it\n\nZurückgesetzt:\n- Status: Closed (erledigt)") === 0);
+
 // ------------------------------------------------------------------- store
 
 check('store: id format', AiActionsRunStore::isId(str_repeat('a1', 16)) && !AiActionsRunStore::isId("' OR 1=1 --")

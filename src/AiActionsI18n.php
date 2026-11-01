@@ -35,6 +35,7 @@ final class AiActionsI18n
                 'discarded'  => 'Verworfen',
                 'expired'    => 'Abgelaufen',
                 'superseded' => 'Nicht ausgeführt (neue Nachricht)',
+                'undone'     => 'Rückgängig gemacht',
             ),
             'failed'       => 'fehlgeschlagen',
             'due_date'     => 'Fälligkeit',
@@ -51,6 +52,11 @@ final class AiActionsI18n
             'note_request' => 'Anfrage',
             'note_changes' => 'Änderungen',
             'note_ok'      => 'erledigt',
+            'note_undo_title' => 'AI-Aktion rückgängig gemacht',
+            'note_undone'  => 'Zurückgesetzt',
+            'undo'         => 'Rückgängig',
+            'undo_left'    => 'Rückgängig (%ds)',
+            'undoing'      => 'Wird zurückgesetzt …',
             'errors'       => array(
                 'generic'           => 'Das hat nicht geklappt. Bitte erneut versuchen.',
                 'not_configured'    => 'Die AI-Anbindung ist nicht eingerichtet. Bitte an den Admin wenden.',
@@ -64,6 +70,7 @@ final class AiActionsI18n
                 'refused'           => 'Die AI hat die Anfrage abgelehnt.',
                 'conversation_full' => 'Dieses Gespräch ist voll. Mit „Neu“ beginnst du ein frisches.',
                 'not_found'         => 'Ticket nicht gefunden oder kein Zugriff.',
+                'undo_expired'      => 'Zu spät: Rückgängig geht nur kurz nach dem Ausführen.',
             ),
         ) : array(
             'title'        => 'AI assistant',
@@ -88,6 +95,7 @@ final class AiActionsI18n
                 'discarded'  => 'Discarded',
                 'expired'    => 'Expired',
                 'superseded' => 'Not run (new message)',
+                'undone'     => 'Undone',
             ),
             'failed'       => 'failed',
             'due_date'     => 'Due date',
@@ -104,6 +112,11 @@ final class AiActionsI18n
             'note_request' => 'Request',
             'note_changes' => 'Changes',
             'note_ok'      => 'done',
+            'note_undo_title' => 'AI action undone',
+            'note_undone'  => 'Put back',
+            'undo'         => 'Undo',
+            'undo_left'    => 'Undo (%ds)',
+            'undoing'      => 'Undoing …',
             'errors'       => array(
                 'generic'           => 'That didn\'t work. Please try again.',
                 'not_configured'    => 'The AI connection is not set up. Please contact your admin.',
@@ -117,6 +130,7 @@ final class AiActionsI18n
                 'refused'           => 'The AI declined the request.',
                 'conversation_full' => 'This conversation is full. "New" starts a fresh one.',
                 'not_found'         => 'Ticket not found or no access.',
+                'undo_expired'      => 'Too late: undo works only shortly after running.',
             ),
         );
     }

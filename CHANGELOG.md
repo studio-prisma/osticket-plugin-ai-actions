@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Status, priority, assignment to an agent or team, and transfer, each through the core dialog's path and permission check. The model picks values only from the lists osTicket shows this agent; they are checked again when the plan runs.
 - Changes run in a fixed order (fields, assignment, transfer, status last). Closing after an assignment in the same plan keeps the new assignee instead of core's "closing agent becomes assignee".
 - Setting a value the ticket already has counts as done, not as an error.
+- Undo for 30 seconds after a run: puts every changed field back in reverse order (status first, transfer back before the rest), with the same permission checks, plus an internal note "AI action undone". The old values stay on the server; the model learns about the undo in its next turn.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 
 [Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/commits/main

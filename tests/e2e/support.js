@@ -5,7 +5,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { expect } = require('@playwright/test');
 
-const LOCAL = path.resolve(__dirname, '../../dev/local');
+// SPA_LOCAL points the suite at a second stack (see dev/up.sh).
+const LOCAL = process.env.SPA_LOCAL ? path.resolve(process.env.SPA_LOCAL) : path.resolve(__dirname, '../../dev/local');
 const COMPOSE = path.resolve(__dirname, '../../dev/docker-compose.yml');
 
 function readEnv(file) {
@@ -75,7 +76,7 @@ async function aiPost(page, path, data) {
  */
 function sql(statement) {
   return execFileSync('docker', [
-    'compose', '--env-file', path.join(LOCAL, 'credentials.env'), '-f', COMPOSE,
+    'compose', '-p', env.SPA_PROJECT || 'spa-dev', '--env-file', path.join(LOCAL, 'credentials.env'), '-f', COMPOSE,
     'exec', '-T', 'db', 'mariadb', '-uosticket', `-p${env.SPA_DB_PASSWORD}`, 'osticket', '-N', '-e', statement,
   ], { encoding: 'utf8' }).trim();
 }

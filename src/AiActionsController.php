@@ -213,23 +213,100 @@ final class AiActionsController
                 : array('ok' => false, 'error' => 'rejected');
             $assigned = $assigned || ($r['ok'] && in_array($c['action'], array('assign_agent', 'assign_team'), true));
             $results[] = $line + array(
-                'ok'      => $r['ok'],
-                'error'   => $r['error'] ?? null,
-                'message' => $r['message'] ?? '',
+                'ok'        => $r['ok'],
+                'error'     => $r['error'] ?? null,
+                'message'   => $r['message'] ?? '',
+                // Server-side only, for undo (see publicResults()).
+                'action'    => (string) ($c['action'] ?? ''),
+                'unchanged' => !empty($r['unchanged']),
+                'previous'  => $r['previous'] ?? null,
             );
             // A change can alter what the agent may do next (e.g. a transfer).
             $ticket = Ticket::lookup($ticket->getId());
         }
         AiActionsRunStore::finish($run['id'], $results);
+        $public = self::publicResults($results);
 
         $errors = array();
         $note = $ticket->postNote(array(
             'title' => $t['note_title'],
-            'note'  => new TextThreadEntryBody(self::noteBody($run['prompt'], $results, $t)),
+            'note'  => new TextThreadEntryBody(self::noteBody($run['prompt'], $public, $t)),
         ), $errors, $thisstaff);
-        AiActionsChatStore::planOutcome($staffId, (int) $ticket->getId(), $run['id'], 'done', $results);
+        $undoable = (bool) array_filter($results, function ($r) {
+            return $r['ok'] && !$r['unchanged'];
+        });
+        AiActionsChatStore::planOutcome($staffId, (int) $ticket->getId(), $run['id'], 'done', $public,
+            $undoable ? array('undo_until' => time() + AiActionsRunStore::UNDO_WINDOW) : array());
 
-        return self::json(200, array('results' => $results, 'note' => $note ? 'saved' : 'failed'));
+        return self::json(200, array('results' => $public, 'note' => $note ? 'saved' : 'failed'));
+    }
+
+    /**
+     * POST /ai/undo: puts back what a run changed, within UNDO_WINDOW,
+     * in reverse order. Notes and failed or unchanged steps are skipped.
+     */
+    public static function undo(): string
+    {
+        global $thisstaff;
+
+        self::guard(false);
+        $staffId = (int) $thisstaff->getId();
+        $run = AiActionsRunStore::claimUndo((string) ($_POST['plan_id'] ?? ''), $staffId);
+        if (!$run) {
+            return self::json(422, array('error' => 'undo_expired'));
+        }
+        $ticket = self::visibleTicket($thisstaff, $run['ticket_id']);
+        if (!$ticket) {
+            AiActionsRunStore::finishUndo($run['id'], $run['results'], array());
+            return self::json(404, array('error' => 'not_found'));
+        }
+
+        $t = AiActionsI18n::strings(self::language($thisstaff));
+        $undone = array();
+        foreach (array_reverse($run['results']) as $r) {
+            if (empty($r['ok']) || !empty($r['unchanged']) || empty($r['action'])) {
+                continue;
+            }
+            $u = AiActionsExecutor::undo($ticket, $thisstaff, (string) $r['action'], $r['previous'] ?? null);
+            $undone[] = array(
+                'label'   => (string) ($r['label'] ?? ''),
+                'value'   => (string) ($r['value'] ?? ''),
+                'ok'      => $u['ok'],
+                'error'   => $u['error'] ?? null,
+                'message' => $u['message'] ?? '',
+            );
+            $ticket = Ticket::lookup($ticket->getId());
+        }
+        AiActionsRunStore::finishUndo($run['id'], $run['results'], $undone);
+
+        $errors = array();
+        $ticket->postNote(array(
+            'title' => $t['note_undo_title'],
+            'note'  => new TextThreadEntryBody(self::undoNoteBody($run['prompt'], $undone, $t)),
+        ), $errors, $thisstaff);
+        AiActionsChatStore::planOutcome($staffId, (int) $ticket->getId(), $run['id'], 'undone', null, array('undo' => $undone));
+
+        return self::json(200, array('results' => $undone));
+    }
+
+    /** Run results without the server-side undo data. Public for the unit tests. */
+    public static function publicResults(array $results): array
+    {
+        return array_map(static function ($r) {
+            unset($r['previous'], $r['unchanged'], $r['action']);
+            return $r;
+        }, $results);
+    }
+
+    /** Plain-text note for an undo. Public for the unit tests. */
+    public static function undoNoteBody(string $prompt, array $undone, array $t): string
+    {
+        $lines = array($t['note_request'] . ': ' . $prompt, '', $t['note_undone'] . ':');
+        foreach ($undone as $u) {
+            $state = $u['ok'] ? $t['note_ok'] : ($t['failed'] . ' (' . ($t['errors'][$u['error'] ?? ''] ?? $u['error'] ?? '') . ')');
+            $lines[] = sprintf('- %s: %s (%s)', $u['label'], $u['value'], $state);
+        }
+        return implode("\n", $lines);
     }
 
     /** POST /ai/discard: the agent rejects a plan. */

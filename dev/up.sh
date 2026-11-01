@@ -3,10 +3,14 @@
 #
 # Passwords are generated on first run and kept in dev/local/credentials.env
 # (git-ignored). Nothing secret is part of the repository.
+#
+# A second stack next to the first: SPA_LOCAL=dev/local-2 SPA_PROJECT=spa-dev-2
+# SPA_HTTP_PORT=8090 SPA_MAIL_PORT=8028 ./dev/up.sh (the values are only read
+# when its credentials.env is created; afterwards that file decides).
 set -euo pipefail
 
 DEV="$(cd "$(dirname "$0")" && pwd)"
-LOCAL="$DEV/local"
+LOCAL="$(mkdir -p "${SPA_LOCAL:-$DEV/local}" && cd "${SPA_LOCAL:-$DEV/local}" && pwd)"
 CRED="$LOCAL/credentials.env"
 mkdir -p "$LOCAL"
 
@@ -20,14 +24,15 @@ if [ ! -f "$CRED" ]; then
     echo "SPA_AGENT_USER=salesagent"
     echo "SPA_AGENT_PASS=$(gen)"
     echo "SPA_CLIENT_PASS=$(gen)"
-    echo "SPA_HTTP_PORT=8089"
-    echo "SPA_MAIL_PORT=8027"
+    echo "SPA_PROJECT=${SPA_PROJECT:-spa-dev}"
+    echo "SPA_HTTP_PORT=${SPA_HTTP_PORT:-8089}"
+    echo "SPA_MAIL_PORT=${SPA_MAIL_PORT:-8027}"
   } > "$CRED"
   echo "Generated $CRED"
 fi
 set -a; . "$CRED"; set +a
 
-COMPOSE=(docker compose --env-file "$CRED" -f "$DEV/docker-compose.yml")
+COMPOSE=(docker compose -p "${SPA_PROJECT:-spa-dev}" --env-file "$CRED" -f "$DEV/docker-compose.yml")
 if [ -f "$LOCAL/compose.override.yml" ]; then
   COMPOSE+=(-f "$LOCAL/compose.override.yml")
   echo "Using $LOCAL/compose.override.yml"

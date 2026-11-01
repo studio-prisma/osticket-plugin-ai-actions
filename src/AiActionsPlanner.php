@@ -144,6 +144,13 @@ final class AiActionsPlanner
                 case 'discarded':
                     $lines[] = 'The agent discarded the previous plan. Nothing was changed.';
                     break;
+                case 'undone':
+                    $lines[] = 'The agent undid the previous plan right after it ran. Put back:';
+                    foreach ((array) ($o['results'] ?? array()) as $r) {
+                        $lines[] = sprintf('- %s: %s (%s)', $r['label'] ?? '', $r['value'] ?? '',
+                            !empty($r['ok']) ? 'back to the old value' : 'could not be undone: ' . ($r['error'] ?? ''));
+                    }
+                    break;
                 case 'expired':
                     $lines[] = 'The previous plan expired before the agent confirmed it. Nothing was changed.';
                     break;
