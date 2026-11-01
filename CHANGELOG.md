@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-01
+
+First release.
+
 ### Added
 
 - Chat bubble in the bottom-right corner of the agent panel. The conversation belongs to the open ticket: the ticket view or a card in the Ticket Board's quick view. The window moves aside while the board's drawer is open.
@@ -31,4 +35,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Undo for 30 seconds after a run: puts every changed field back in reverse order (status first, transfer back before the rest), with the same permission checks, plus an internal note "AI action undone". The old values stay on the server; the model learns about the undo in its next turn.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/commits/main
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/tag/v0.1.0
