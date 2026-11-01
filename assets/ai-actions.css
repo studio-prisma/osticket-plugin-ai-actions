@@ -430,6 +430,13 @@
   background: var(--spa-soft);
 }
 
+.spa-ai-proposal-by {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--spa-muted);
+}
+
 .spa-ai-panel .spa-ai-undo:disabled {
   opacity: 0.45;
   cursor: default;

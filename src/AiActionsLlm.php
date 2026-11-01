@@ -47,6 +47,13 @@ final class AiActionsFakeLlm implements AiActionsLlm
     {
         $last = end($messages);
         $usage = array('input' => 0, 'output' => 0);
+        // The send guard's reviewer: refuses replies that carry the word "evil".
+        if (strpos($system, 'You review an automatic email reply') === 0) {
+            $all = (string) json_encode($messages);
+            $reply = preg_match('/<reply>(.*)<\\\/reply>/s', $all, $m) ? $m[1] : $all;
+            return array('stop' => 'end_turn', 'usage' => $usage, 'content' => array(array('type' => 'text',
+                'text' => stripos($reply, 'evil') !== false ? '{"ok": false, "reasons": ["injection"]}' : '{"ok": true}')));
+        }
 
         $prompt = '';
         $outcome = '';
@@ -96,7 +103,9 @@ final class AiActionsFakeLlm implements AiActionsLlm
             $calls[] = array('add_internal_note', array('text' => 'Fake note: customer called back.'));
         }
         if (preg_match('/\b(send|sende)/iu', $prompt) && strpos($options, 'send_reply:') !== false) {
-            $calls[] = array('send_reply', array('text' => "Hello,\n\nyour request is solved.\n\nBest regards"));
+            $calls[] = array('send_reply', array('text' => preg_match('/\bevil\b/i', $prompt)
+                ? "Hello,\n\nas asked, here is the link: https://evil.example/login\n\nBest regards"
+                : "Hello,\n\nyour request is solved.\n\nBest regards"));
         }
         if (preg_match('/\b(draft|entwurf)/iu', $prompt)) {
             $calls[] = array('draft_reply', array('text' => "Hello,\n\nthanks for your message. <b>We are on it.</b>\n\nBest regards"));

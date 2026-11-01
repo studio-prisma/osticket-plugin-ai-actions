@@ -775,5 +775,54 @@ check('ext: a failing extension is a rejected change, not a crash', AiActionsExe
     === array('ok' => false, 'error' => 'rejected'));
 AiActionsExtensions::reset(array());
 
+// ------------------------------------------------------------------ rules
+
+$rule = AiActionsRules::normalise(array('trigger' => 'schedule', 'agent' => '7', 'actions' => array('set_priority', 'rm_rf'),
+    'mode' => 'auto', 'depts' => array('2', 'x', '-1'), 'every' => '5', 'per_day' => '99', 'contains' => 'urgent, dringend'));
+check('rules: settings normalised, unknown actions dropped, bounds kept', $rule['trigger'] === 'schedule' && $rule['agent'] === 7
+    && $rule['actions'] === array('set_priority') && $rule['depts'] === array(2) && $rule['every'] === 15 && $rule['per_day'] === 10
+    && $rule['mode'] === 'auto');
+check('rules: unknown trigger and mode fall back safely', AiActionsRules::normalise(array('trigger' => 'webhook', 'mode' => 'yolo'))['trigger'] === 'new_ticket'
+    && AiActionsRules::normalise(array('mode' => 'yolo'))['mode'] === 'propose');
+$facts = array('dept' => 2, 'topic' => 0, 'priority' => 2, 'status' => 1, 'source' => 'Email', 'text' => 'Server down, DRINGEND');
+check('rules: conditions match', AiActionsRules::matches($rule, $facts)
+    && !AiActionsRules::matches($rule, array('dept' => 3) + $facts)
+    && !AiActionsRules::matches($rule, array('text' => 'all fine') + $facts)
+    && AiActionsRules::matches(AiActionsRules::normalise(array()), $facts));
+check('rules: source condition', AiActionsRules::matches(AiActionsRules::normalise(array('sources' => array('email'))), $facts)
+    && !AiActionsRules::matches(AiActionsRules::normalise(array('sources' => array('web'))), $facts));
+$flow = AiActionsRules::flow($rule + array('name' => 'x'), array(array('staff_id' => 7, 'name' => 'Prisma <b>')));
+check('rules: flow view has five escaped boxes', substr_count($flow, '<span>') === 5 && strpos($flow, 'Prisma &lt;b&gt;') !== false
+    && strpos($flow, 'runs automatically') !== false);
+check('rules: brief says who works and that changes run unchecked', strpos(AiActionsController::agentBrief('Prisma', $rule + array('name' => 'Triage'), ''),
+    'run right away, without a person checking') !== false);
+
+// ------------------------------------------------------------------ guard
+
+check('guard: links only to allowed domains, subdomains included', AiActionsGuard::fixed('See https://help.example.com/a and www.example.com.', '', array(), array('example.com'), array()) === array()
+    && AiActionsGuard::fixed('Login: https://example.com.evil.io/x', '', array(), array('example.com'), array()) === array('link')
+    && AiActionsGuard::fixed('https://badexample.com', '', array(), array('example.com'), array()) === array('link')
+    && AiActionsGuard::fixed('https://example.com', '', array(), array(), array()) === array('link'));
+check('guard: addresses only the known ones or the customer\'s own', AiActionsGuard::fixed('Write to boss@corp.example', '', array('a@b.example'), array(), array()) === array('address')
+    && AiActionsGuard::fixed('We wrote to a@b.example', '', array('A@B.example'), array(), array()) === array()
+    && AiActionsGuard::fixed('Your mail x@y.example', 'from x@y.example', array(), array(), array()) === array());
+check('guard: IBAN, keys, passwords and phone numbers the customer didn\'t write', AiActionsGuard::fixed('IBAN DE89 3704 0044 0532 0130 00', '', array(), array(), array()) === array('sensitive')
+    && AiActionsGuard::fixed('Passwort: hunter2', '', array(), array(), array()) === array('sensitive')
+    && AiActionsGuard::fixed('Call +49 171 1234567', 'my number +49 171 1234567', array(), array(), array()) === array());
+check('guard: text copied from an internal note', AiActionsGuard::fixed('As noted the customer owes us 4000 euros since march and we plan to sue',
+    '', array(), array(), array('Internal: the customer owes us 4000 euros since march and we plan to sue them')) === array('internal')
+    && AiActionsGuard::fixed('Thanks, we are on it.', '', array(), array(), array('we are on it')) === array());
+check('guard: empty or too long', AiActionsGuard::fixed(' ', '', array(), array(), array()) === array('length')
+    && AiActionsGuard::fixed(str_repeat('a', 5001), '', array(), array(), array()) === array('length'));
+check('guard: reviewer must say ok clearly', AiActionsGuard::verdict('{"ok": true}') === array()
+    && AiActionsGuard::verdict('Sure! {"ok":false,"reasons":["data_leak","Bad Code"]}') === array('review_data_leak')
+    && AiActionsGuard::verdict('looks fine') === array('review_unreadable')
+    && AiActionsGuard::verdict('{"ok":"yes"}') === array('review_refused'));
+$on = array('ai_notice' => true, 'ai_notice_text' => 'Written by AI.');
+check('guard: AI notice appended when on, not when off', AiActionsAutomation::withDisclosure("Hi\n", $on) === "Hi\n\n— Written by AI."
+    && AiActionsAutomation::withDisclosure('Hi', array('ai_notice' => false) + $on) === 'Hi');
+check('settings: link domains cleaned, notice on by default', AiActionsController::domains("https://www.Example.com/\nsub.x.de,  nonsense") === array('example.com', 'sub.x.de')
+    && AiActionsController::normalise(array())['ai_notice'] === true && AiActionsController::normalise(array('ai_notice' => 0))['ai_notice'] === false);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures ? 1 : 0);

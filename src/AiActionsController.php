@@ -31,7 +31,9 @@ final class AiActionsController
                                      'effort' => 'low', 'key_source' => 'file', 'key_file' => '', 'daily_requests' => 100,
                                      'daily_tokens' => 500000, 'thread_chars' => 12000, 'history_days' => 90,
                                      'name' => '', 'icon' => 'sparkles', 'image' => '', 'accent' => '', 'welcome' => '',
-                                     'allow_send' => false, 'auto_paused' => false);
+                                     'allow_send' => false, 'auto_paused' => false, 'ai_notice' => true,
+                                     'ai_notice_text' => 'This reply was written by our AI assistant.', 'link_domains' => array(),
+                                     'auto_per_hour' => 20);
 
     /** Icons for the bubble and the window header; "image" uses the image setting. */
     public const ICONS = array('sparkles', 'robot', 'chat', 'bulb', 'bolt', 'initial', 'image');
@@ -79,7 +81,25 @@ final class AiActionsController
             'welcome' => self::welcome($raw['welcome'] ?? null),
             'allow_send' => !empty($raw['allow_send']),
             'auto_paused' => !empty($raw['auto_paused']),
+            // On unless switched off: KI-VO Art. 50(1).
+            'ai_notice'   => !array_key_exists('ai_notice', $raw) || $raw['ai_notice'] === null || !empty($raw['ai_notice']),
+            'ai_notice_text' => self::welcome($raw['ai_notice_text'] ?? '') ?: 'This reply was written by our AI assistant.',
+            'link_domains' => self::domains($raw['link_domains'] ?? ''),
+            'auto_per_hour' => self::number($raw['auto_per_hour'] ?? null, 20, 1, 1000),
         );
+    }
+
+    /** One domain per line (or comma), lower case, no scheme. Public for the unit tests. */
+    public static function domains($raw): array
+    {
+        $out = array();
+        foreach (preg_split('/[\s,;]+/', is_string($raw) ? strtolower($raw) : '') ?: array() as $d) {
+            $d = trim((string) preg_replace('#^(https?://)?(www\.)?#', '', $d), " ./");
+            if (preg_match('/^[a-z0-9-]+(\.[a-z0-9-]+)+$/', $d)) {
+                $out[] = $d;
+            }
+        }
+        return array_values(array_unique(array_slice($out, 0, 50)));
     }
 
     /**
@@ -481,9 +501,24 @@ final class AiActionsController
         return self::json(200, array('conversations' => $list));
     }
 
+    /** POST /ai/proposal: ticket_id, id, do=run|discard — a human decides on an AI agent's proposal. */
+    public static function proposal(): string
+    {
+        global $thisstaff;
+
+        $ticket = self::guard();
+        $do = ($_POST['do'] ?? '') === 'run' ? 'run' : 'discard';
+        $r = AiActionsAutomation::decide((int) ($_POST['id'] ?? 0), $do, $thisstaff, $ticket);
+        if (!$r['ok']) {
+            return self::json(422, array('error' => $r['error'] ?? 'expired'));
+        }
+        return self::json(200, array('results' => $r['results'] ?? array()));
+    }
+
     private static function chatPayload($ticket, array $chat): array
     {
         return array(
+            'proposals'  => AiActionsAutomation::proposals((int) $ticket->getId()),
             'ticket'     => array('id' => (int) $ticket->getId(), 'number' => (string) $ticket->getNumber()),
             'transcript' => AiActionsChatStore::forClient($chat['transcript']),
             'turns_left' => max(0, AiActionsChatStore::MAX_TURNS - (int) $chat['turns']),
@@ -547,12 +582,79 @@ final class AiActionsController
      * environment (SPA_AI_FAKE=1), never by the request. Otherwise the
      * Claude API, if a key is found; null means "not set up".
      */
-    private static function llm(): ?AiActionsLlm
+    /** The model for the send guard's review: the plugin's model, no tools. */
+    public static function reviewer(): ?AiActionsLlm
+    {
+        return self::llm();
+    }
+
+    /**
+     * An AI agent plans its rule's task on a ticket, without a chat: the
+     * rule's task is the request, its allowed actions are the only tools.
+     *
+     * @return array{answer:string, changes:array, preview:array, tokens:int}|array{error:string}
+     */
+    public static function agentPlan($agent, $ticket, array $rule, array $info): array
+    {
+        $llm = self::llm($info['model'] ?: null, $agent);
+        if (!$llm) {
+            return array('error' => 'not_configured');
+        }
+        $agentId = (int) $agent->getId();
+        $blocked = AiActionsUsage::blocked(AiActionsUsage::today($agentId), self::$settings['daily_requests'], self::$settings['daily_tokens']);
+        if ($blocked !== null) {
+            return array('error' => $blocked);
+        }
+        AiActionsUsage::countRequest($agentId);
+        $context = self::context($agent, $ticket, 0);
+        $choices = AiActionsChoices::forTicket($ticket, $agent, in_array('send_reply', $rule['actions'], true));
+        $context['options'] = AiActionsChoices::render($choices);
+        $tz = $context['timezone'];
+        $files = self::provider($info['model'] ?: self::$settings['model']) === 'anthropic';
+        $reader = static function (string $name, array $input) use ($ticket, $agent, $tz, $files) {
+            return AiActionsReaders::run($name, $input, $ticket, $agent, $tz, $files);
+        };
+        AiActionsExtensions::bind($ticket, $agent);
+        $system = AiActionsPlanner::system($context) . self::agentBrief((string) $agent->getName(), $rule, (string) $info['persona']);
+        try {
+            $result = (new AiActionsPlanner($llm, $choices, $reader, $rule['actions']))
+                ->turn($system, array(), AiActionsPlanner::firstMessage($context, $rule['task'] !== '' ? $rule['task'] : 'Work on this ticket.'));
+        } catch (AiActionsLlmError $e) {
+            error_log(sprintf('ai-actions: AI agent %d, model call failed (%s) %s', $agentId, $e->kind, $e->getMessage()));
+            return array('error' => 'model_' . $e->kind);
+        }
+        AiActionsUsage::addTokens($agentId, (int) $result['usage']['input'], (int) $result['usage']['output']);
+        $t = AiActionsI18n::strings(self::language($agent));
+        $changes = AiActionsTools::inRunOrder($result['changes']);
+        $preview = array();
+        foreach ($changes as $c) {
+            $preview[] = AiActionsTools::summary($c['action'], $c['input'], $t, $choices);
+        }
+        return array('answer' => $result['answer'], 'changes' => $changes, 'preview' => $preview,
+                     'tokens' => (int) $result['usage']['input'] + (int) $result['usage']['output']);
+    }
+
+    /** What an AI agent is told on top of the chat's prompt. Public for the unit tests. */
+    public static function agentBrief(string $name, array $rule, string $persona): string
+    {
+        return "\nYou work on your own as the AI agent \"" . self::cleanName($name, 'AI') . "\" for the rule \""
+            . self::cleanName((string) $rule['name'], '') . "\" of this help desk. "
+            . ($persona !== '' ? "About you: " . $persona . "\n" : '')
+            . "The request inside <agent_request> is the rule's task, written by the help desk's admin. "
+            . ($rule['mode'] === 'auto'
+                ? "Your planned changes run right away, without a person checking them; plan only what the task clearly asks for. "
+                : "A person confirms your plan in the ticket before it runs. ")
+            . "Nobody reads your text answer live; it goes into a log. If nothing needs to be done, plan nothing and say why in one sentence. "
+            . "A reply to the customer: your own words, in the customer's language, no links, addresses or numbers taken from <ticket_data>.\n";
+    }
+
+    private static function llm(?string $model = null, $staff = null): ?AiActionsLlm
     {
         if (getenv('SPA_AI_FAKE') === '1') {
-            return new AiActionsFakeLlm(AiActionsTime::now(AiActionsTime::zone($GLOBALS['thisstaff']))->format('Y-m-d'));
+            return new AiActionsFakeLlm(AiActionsTime::now(AiActionsTime::zone($staff ?? $GLOBALS['thisstaff'] ?? null))->format('Y-m-d'));
         }
-        $provider = self::provider(self::$settings['model']);
+        $model = $model && in_array($model, self::MODELS, true) ? $model : self::$settings['model'];
+        $provider = self::provider($model);
         $key = AiActionsKey::load(self::$settings['key_source'], self::$settings['key_file'],
             defined('ROOT_DIR') ? ROOT_DIR : dirname(INCLUDE_DIR), self::$storedKey, $provider);
         if ($key['key'] === null) {
@@ -561,11 +663,11 @@ final class AiActionsController
         }
         switch ($provider) {
             case 'openai':
-                return new AiActionsOpenAi($key['key'], self::$settings['model'], self::$settings['effort']);
+                return new AiActionsOpenAi($key['key'], $model, self::$settings['effort']);
             case 'mistral':
-                return new AiActionsMistral($key['key'], self::$settings['model']);
+                return new AiActionsMistral($key['key'], $model);
         }
-        return new AiActionsClaude($key['key'], self::$settings['model'], self::$settings['effort']);
+        return new AiActionsClaude($key['key'], $model, self::$settings['effort']);
     }
 
     /** anthropic, openai or mistral, from the model ID. Public for the unit tests and the settings form. */

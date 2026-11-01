@@ -44,6 +44,9 @@ require_once __DIR__ . '/src/AiActionsController.php';
 require_once __DIR__ . '/src/AiActionsAgents.php';
 require_once __DIR__ . '/src/AiActionsJobs.php';
 require_once __DIR__ . '/src/AiActionsAdmin.php';
+require_once __DIR__ . '/src/AiActionsRules.php';
+require_once __DIR__ . '/src/AiActionsGuard.php';
+require_once __DIR__ . '/src/AiActionsAutomation.php';
 
 class AiActionsPlugin extends Plugin
 {
@@ -93,6 +96,10 @@ class AiActionsPlugin extends Plugin
             'welcome'  => $config->get('welcome'),
             'allow_send' => $config->get('allow_send'),
             'auto_paused' => $config->get('auto_paused'),
+            'ai_notice'   => $config->get('ai_notice'),
+            'ai_notice_text' => $config->get('ai_notice_text'),
+            'link_domains' => $config->get('link_domains'),
+            'auto_per_hour' => $config->get('auto_per_hour'),
         ), static function () use ($config) {
             // PluginConfig decrypts PasswordField values when it loads.
             $v = $config->get('key_stored');
@@ -109,8 +116,20 @@ class AiActionsPlugin extends Plugin
         Signal::connect('auth.pwreset.login', static function ($staff) {
             AiActionsAgents::refuseLogin($staff);
         });
+        AiActionsJobs::$worker = array('AiActionsAutomation', 'work');
         Signal::connect('cron', static function () {
+            AiActionsRules::schedule();
             AiActionsJobs::cron();
+        });
+        // Rule triggers only queue work; the cron does it.
+        Signal::connect('ticket.created', static function ($ticket) {
+            AiActionsRules::onTicketCreated($ticket);
+        });
+        Signal::connect('object.edited', static function ($object, $data = null) {
+            AiActionsRules::onEdited($object, (array) $data);
+        });
+        Signal::connect('threadentry.created', static function ($entry) {
+            AiActionsRules::onEntry($entry);
         });
         AiActionsAssets::watch();
     }
@@ -141,6 +160,9 @@ class AiActionsPlugin extends Plugin
         }));
         $dispatcher->append(url_post('^/ai/reset$', static function () {
             return AiActionsController::reset();
+        }));
+        $dispatcher->append(url_post('^/ai/proposal$', static function () {
+            return AiActionsController::proposal();
         }));
         $dispatcher->append(url_get('^/ai/admin$', static function () {
             return AiActionsAdmin::page();

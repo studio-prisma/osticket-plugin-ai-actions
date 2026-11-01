@@ -65,6 +65,37 @@ class AiActionsConfig extends PluginConfig
                 ),
             )),
 
+            'ai_notice' => new BooleanField(array(
+                'label'         => 'AI notice in automatic replies',
+                'default'       => true,
+                'configuration' => array(
+                    'desc' => 'Adds the text below to every reply an AI agent sends on its own. EU AI Act Art. 50(1), '
+                            . 'in force since 2 Aug 2026: people must be told they deal with an AI, unless that is obvious '
+                            . '(e.g. the sender is named "AI assistant …"). Switch off only then.',
+                ),
+            )),
+
+            'ai_notice_text' => new TextboxField(array(
+                'label'         => 'AI notice text',
+                'default'       => 'This reply was written by our AI assistant.',
+                'configuration' => array('size' => 60, 'length' => 200),
+            )),
+
+            'link_domains' => new TextareaField(array(
+                'label'         => 'Allowed link domains',
+                'default'       => '',
+                'hint'          => 'Automatic replies may only link to these domains (one per line; subdomains included). '
+                                 . 'Empty: no links at all. Replies an agent confirms are not affected.',
+                'configuration' => array('rows' => 3, 'cols' => 40, 'html' => false, 'length' => 2000),
+            )),
+
+            'auto_per_hour' => new TextboxField(array(
+                'label'         => 'Automatic replies per hour',
+                'default'       => '20',
+                'hint'          => 'For the whole help desk. Per ticket: at most 1 a day and 3 in total.',
+                'configuration' => array('size' => 6, 'length' => 4, 'validator' => 'number'),
+            )),
+
             'sec_api' => new SectionBreakField(array(
                 'label' => 'Claude API',
             )),

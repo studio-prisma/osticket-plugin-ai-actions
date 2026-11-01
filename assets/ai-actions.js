@@ -25,7 +25,7 @@
 
   // view: chat | history (list of earlier conversations) | archived (one of them, read only)
   var state = {
-    open: false, ticket: 0, number: '', transcript: [], turnsLeft: 0, busy: false, error: '',
+    open: false, ticket: 0, number: '', transcript: [], proposals: [], turnsLeft: 0, busy: false, error: '',
     view: 'chat', history: null, archived: null,
   };
 
@@ -268,7 +268,7 @@
     if (state.view === 'history') return renderHistory();
     if (state.view === 'archived') return renderArchived();
 
-    if (!state.transcript.length && !state.busy) {
+    if (!state.transcript.length && !state.proposals.length && !state.busy) {
       log.appendChild(el('p', 'spa-ai-hint spa-ai-welcome', cfg.welcome || t.empty));
       var chips = el('div', 'spa-ai-chips');
       (t.suggestions || []).forEach(function (s) {
@@ -280,6 +280,7 @@
       });
       log.appendChild(chips);
     }
+    state.proposals.forEach(function (p) { log.appendChild(proposalCard(p)); });
     state.transcript.forEach(function (item) { log.appendChild(message(item)); });
     if (state.busy) {
       var dots = el('div', 'spa-ai-msg spa-ai-msg-ai spa-ai-busy');
@@ -382,6 +383,42 @@
     return card;
   }
 
+  /** A plan an AI agent made through a rule; anyone who can open the ticket decides, with their own rights. */
+  function proposalCard(p) {
+    var box = el('div', 'spa-ai-msg spa-ai-msg-ai spa-ai-proposal');
+    box.appendChild(el('div', 'spa-ai-proposal-by', String(t.proposal_by || '%s').replace('%s', p.by) + (p.rule ? ' · ' + p.rule : '')));
+    if (p.answer) box.appendChild(el('div', 'spa-ai-bubble', p.answer));
+    var card = el('div', 'spa-ai-plan spa-ai-plan-open');
+    card.appendChild(el('div', 'spa-ai-plan-title', t.preview));
+    var list = el('ul', 'spa-ai-plan-list');
+    (p.changes || []).forEach(function (c) {
+      var li = el('li', 'spa-ai-change');
+      li.appendChild(el('span', 'spa-ai-plan-label', c.label));
+      li.appendChild(el('span', 'spa-ai-plan-value', c.value));
+      list.appendChild(li);
+    });
+    card.appendChild(list);
+    var actions = el('div', 'spa-ai-plan-actions');
+    actions.appendChild(button('spa-ai-run', t.run, function () { decide(p.id, 'run'); }));
+    actions.appendChild(button('spa-ai-discard', t.discard, function () { decide(p.id, 'discard'); }));
+    card.appendChild(actions);
+    box.appendChild(card);
+    return box;
+  }
+
+  function decide(id, what) {
+    var ticket = state.ticket;
+    state.busy = what === 'run' ? 'run' : false;
+    state.error = '';
+    render();
+    request('POST', '/proposal', { ticket_id: String(ticket), id: String(id), do: what }).then(function (json) {
+      if ((json.results || []).some(function (r) { return r.ok; })) refreshTicket(ticket);
+    }).catch(fail).then(function () {
+      state.busy = false;
+      return load(ticket);
+    });
+  }
+
   /** Undo without a countdown: usable while the server allows it, then greyed out. */
   function undoButton(planId, seconds) {
     var b = button('spa-ai-undo', t.undo || 'Undo', function () { if (!b.disabled) undo(planId); });
@@ -403,6 +440,7 @@
     state.ticket = json.ticket ? json.ticket.id : state.ticket;
     state.number = json.ticket ? json.ticket.number : state.number;
     state.transcript = json.transcript || [];
+    state.proposals = json.proposals || [];
     state.turnsLeft = json.turns_left || 0;
   }
 
@@ -414,6 +452,7 @@
     state.ticket = id;
     state.number = '';
     state.transcript = [];
+    state.proposals = [];
     state.error = '';
     state.view = 'chat';
     render();

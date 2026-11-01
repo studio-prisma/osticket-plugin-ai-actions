@@ -29,11 +29,15 @@ final class AiActionsPlanner
     /** @var callable|null fn(string $tool, array $input): string|array, runs read tools */
     private $reader;
 
-    public function __construct(AiActionsLlm $llm, ?array $choices = null, ?callable $reader = null)
+    /** @var string[]|null write tools a rule allows; null = all */
+    private $allowed;
+
+    public function __construct(AiActionsLlm $llm, ?array $choices = null, ?callable $reader = null, ?array $allowed = null)
     {
         $this->llm = $llm;
         $this->choices = $choices;
         $this->reader = $reader;
+        $this->allowed = $allowed;
         // Offered only where the agent may send: setting on, PERM_REPLY (see AiActionsChoices).
         $this->send = isset($choices['send_reply']);
     }
@@ -58,6 +62,12 @@ final class AiActionsPlanner
     public function turn(string $system, array $history, array $userBlocks): array
     {
         $tools = array_merge(AiActionsTools::definitions($this->send), AiActionsExtensions::definitions());
+        if ($this->allowed !== null) {
+            $allowed = $this->allowed;
+            $tools = array_values(array_filter($tools, static function ($t) use ($allowed) {
+                return in_array($t['name'], $allowed, true);
+            }));
+        }
         if ($this->reader) {
             $tools = array_merge(AiActionsReaders::definitions(), $tools);
         }
@@ -187,7 +197,8 @@ final class AiActionsPlanner
             $r['content'] = call_user_func($this->reader, $name, $input);
             return $r;
         }
-        if (!AiActionsTools::isWrite($name) || ($name === 'send_reply' && !$this->send)) {
+        if (!AiActionsTools::isWrite($name) || ($name === 'send_reply' && !$this->send)
+                || ($this->allowed !== null && !in_array($name, $this->allowed, true))) {
             $rejected++;
             return self::result($id, 'Unknown tool.', true);
         }

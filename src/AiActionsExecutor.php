@@ -18,7 +18,8 @@ final class AiActionsExecutor
      * @param bool $assignedInRun an earlier change of the same plan assigned the ticket
      * @return array{ok:bool, error?:string, message?:string, previous?:mixed}
      */
-    public static function run($ticket, $staff, string $action, array $input, bool $assignedInRun = false): array
+    /** @param bool $ruleSend a rule allowed send_reply (its send guard passed); replaces the chat's setting */
+    public static function run($ticket, $staff, string $action, array $input, bool $assignedInRun = false, bool $ruleSend = false): array
     {
         $value = (string) (AiActionsTools::choiceValue($action, $input) ?? '');
         switch ($action) {
@@ -40,7 +41,7 @@ final class AiActionsExecutor
             case 'create_subticket':
                 return self::subticket($ticket, $staff, (string) ($input['subject'] ?? ''), (string) ($input['message'] ?? ''));
             case 'send_reply':
-                return self::reply($ticket, $staff, (string) ($input['text'] ?? ''));
+                return self::reply($ticket, $staff, (string) ($input['text'] ?? ''), $ruleSend);
         }
         if (strpos($action, 'x_') === 0) {
             return AiActionsExtensions::run($action, $input, $ticket, $staff);
@@ -54,9 +55,9 @@ final class AiActionsExecutor
      * change, no auto-claim. Sending must still be allowed in the settings
      * when the plan runs.
      */
-    private static function reply($ticket, $staff, string $text): array
+    private static function reply($ticket, $staff, string $text, bool $ruleSend = false): array
     {
-        if (!AiActionsController::settings()['allow_send']) {
+        if (!$ruleSend && !AiActionsController::settings()['allow_send']) {
             return self::fail('send_off');
         }
         if (!$ticket->checkStaffPerm($staff, Ticket::PERM_REPLY)) {

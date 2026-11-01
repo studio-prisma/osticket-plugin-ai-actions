@@ -19,8 +19,10 @@ final class AiActionsChoices
      * @return array<string, array<int, array{value:string, label:string}>>
      *         keys: set_status, set_priority, assign_agent, assign_team, transfer
      */
-    public static function forTicket($ticket, $staff): array
+    /** @param bool|null $send offer send_reply; null = the plugin setting (chat), a rule decides for itself */
+    public static function forTicket($ticket, $staff, ?bool $send = null): array
     {
+        $send = $send ?? AiActionsController::settings()['allow_send'];
         $out = array('set_status' => self::statuses($ticket));
         if ($ticket->checkStaffPerm($staff, Ticket::PERM_EDIT) && ($f = $ticket->getField('priority'))) {
             $out['set_priority'] = self::options($f->getChoices());
@@ -30,7 +32,7 @@ final class AiActionsChoices
             $out['assign_team'] = self::assignees($ticket, 'teams');
         }
         // Who a sent reply reaches, exactly as the reply form's default ("all").
-        if (AiActionsController::settings()['allow_send'] && $ticket->checkStaffPerm($staff, Ticket::PERM_REPLY)) {
+        if ($send && $ticket->checkStaffPerm($staff, Ticket::PERM_REPLY)) {
             $out['send_reply'] = array(array('value' => 'recipients', 'label' => self::recipients($ticket)));
         }
         if ($ticket->checkStaffPerm($staff, Ticket::PERM_TRANSFER)) {
@@ -46,7 +48,10 @@ final class AiActionsChoices
         $owner = $ticket->getOwner();
         $line = 'To: ' . ($owner ? trim($owner->getName() . ' <' . $owner->getEmail() . '>') : '?');
         $cc = array();
-        foreach ((array) ($ticket->getActiveCollaborators() ?: array()) as $c) {
+        foreach (($ticket->getActiveCollaborators() ?: array()) as $c) {
+            if (!is_object($c)) {
+                continue;
+            }
             $cc[] = trim($c->getName() . ' <' . $c->getEmail() . '>');
         }
         return $cc ? $line . '; Cc: ' . implode(', ', $cc) : $line;

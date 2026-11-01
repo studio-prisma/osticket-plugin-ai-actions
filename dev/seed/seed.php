@@ -203,6 +203,8 @@ AiActionsChatStore::ensure();
 AiActionsUsage::ensure();
 AiActionsAgents::ensure();
 AiActionsJobs::ensure();
+AiActionsRules::ensure();
+AiActionsAutomation::ensure();
 
 // The Ticket Board plugin, if dev/local/compose.override.yml mounts it
 // (the chat has to work in its quick view). Not the start page, so the
