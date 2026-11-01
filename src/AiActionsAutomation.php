@@ -202,19 +202,36 @@ final class AiActionsAutomation
             $sent ? 1 : 0, $tokens));
     }
 
+    /** A settings change from the admin chat, for the log (24-hour undo there). */
+    public static function logAdmin(int $staffId, string $prompt, array $results): void
+    {
+        self::ensure();
+        db_query(sprintf("INSERT INTO `%s` (rule_id, ticket_id, agent_id, mode, answer, results, guard, sent, tokens, created)
+            VALUES (0, 0, %d, 'admin', %s, %s, '[]', 0, 0, NOW())", self::logTable(), $staffId, self::quote($prompt), self::quote(json_encode($results))));
+    }
+
     /** Undo of an automatic run, by an admin, within UNDO_HOURS. */
     public static function undo(int $id): bool
     {
         global $thisstaff;
 
         self::ensure();
-        db_query(sprintf("UPDATE `%s` SET undone=1 WHERE id=%d AND mode='auto' AND undone=0 AND created > NOW() - INTERVAL %d HOUR",
+        db_query(sprintf("UPDATE `%s` SET undone=1 WHERE id=%d AND mode IN ('auto','admin') AND undone=0 AND created > NOW() - INTERVAL %d HOUR",
             self::logTable(), $id, self::UNDO_HOURS));
         if (db_affected_rows() !== 1) {
             return false;
         }
-        $res = db_query(sprintf('SELECT ticket_id, results, rule_id FROM `%s` WHERE id=%d', self::logTable(), $id));
+        $res = db_query(sprintf('SELECT ticket_id, results, rule_id, mode FROM `%s` WHERE id=%d', self::logTable(), $id));
         $row = $res ? db_fetch_array($res) : null;
+        if ($row && $row['mode'] === 'admin') {
+            $ok = true;
+            foreach (array_reverse((array) json_decode((string) $row['results'], true)) as $r) {
+                if (!empty($r['ok']) && !empty($r['action'])) {
+                    $ok = AiActionsAdminTools::undo((string) $r['action'], $r['previous'] ?? null, $thisstaff)['ok'] && $ok;
+                }
+            }
+            return $ok;
+        }
         $ticket = $row ? Ticket::lookup((int) $row['ticket_id']) : null;
         if (!$ticket || !($thisstaff instanceof Staff)) {
             return false;
@@ -322,11 +339,12 @@ final class AiActionsAutomation
                 $parts[] = sprintf('%s %s: %s', !empty($x['ok']) ? '✓' : '✕', $x['label'] ?? '', mb_substr((string) ($x['value'] ?? ''), 0, 80));
             }
             $guard = (array) json_decode((string) $r['guard'], true);
-            $undo = $r['mode'] === 'auto' && !$r['undone'] && strtotime($r['created']) > time() - self::UNDO_HOURS * 3600
+            $undo = in_array($r['mode'], array('auto', 'admin'), true) && !$r['undone'] && strtotime($r['created']) > time() - self::UNDO_HOURS * 3600
                 ? AiActionsAdmin::button('log_undo', 'Undo', array('log_id' => (string) $r['id'])) : ($r['undone'] ? 'undone' : '');
             $rows .= sprintf('<tr><td>%s</td><td><a href="%s">#%s</a></td><td>%s</td><td>%s</td><td>%s</td><td>%s%s</td><td>%d</td><td>%s</td></tr>',
                 call_user_func($e, (string) $r['created']), call_user_func($e, ROOT_PATH . 'scp/tickets.php?id=' . (int) $r['ticket_id']),
-                call_user_func($e, (string) $r['number']), call_user_func($e, $rule ? $rule['name'] : '#' . $r['rule_id']),
+                call_user_func($e, $r['mode'] === 'admin' ? 'settings' : (string) $r['number']),
+                call_user_func($e, $r['mode'] === 'admin' ? 'admin chat' : ($rule ? $rule['name'] : '#' . $r['rule_id'])),
                 call_user_func($e, trim($r['firstname'] . ' ' . $r['lastname'])), call_user_func($e, (string) $r['mode']),
                 nl2br(call_user_func($e, implode("\n", $parts))),
                 $guard ? '<br><span class="faded">send guard: ' . call_user_func($e, !empty($guard['ok']) ? 'ok' : implode(', ', (array) ($guard['reasons'] ?? array()))) . '</span>' : '',

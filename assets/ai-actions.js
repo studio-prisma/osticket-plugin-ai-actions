@@ -25,7 +25,7 @@
 
   // view: chat | history (list of earlier conversations) | archived (one of them, read only)
   var state = {
-    open: false, ticket: 0, number: '', transcript: [], proposals: [], turnsLeft: 0, busy: false, error: '',
+    open: false, ticket: -1, number: '', transcript: [], proposals: [], turnsLeft: 0, busy: false, error: '',
     view: 'chat', history: null, archived: null,
   };
 
@@ -150,8 +150,13 @@
     return d && !d.hidden ? d : null;
   }
 
-  /** ID of the ticket the agent is looking at, or 0. */
+  /** ID of the ticket the agent is looking at, 0 for the settings chat on admin pages, or -1 for nothing. */
   function currentTicket() {
+    if (cfg.admin) return 0;
+    return ticketOnPage() || -1;
+  }
+
+  function ticketOnPage() {
     var drawer = boardDrawer();
     var body = drawer && drawer.querySelector('.spb-panel-body[data-ticket-id]');
     if (body) return parseInt(body.getAttribute('data-ticket-id'), 10) || 0;
@@ -248,11 +253,11 @@
   // ----------------------------------------------------------------- render
 
   function render() {
-    var usable = state.ticket > 0;
+    var usable = state.ticket > 0 || state.ticket === 0;
     var chat = state.view === 'chat';
-    subtitle.textContent = state.ticket ? (t.ticket + ' #' + state.number) : '';
+    subtitle.textContent = state.ticket > 0 ? (t.ticket + ' #' + state.number) : (state.ticket === 0 ? (t.settings || 'Settings') : '');
     backBtn.hidden = chat;
-    historyBtn.hidden = !usable || !chat;
+    historyBtn.hidden = !usable || !chat || state.ticket === 0;
     newBtn.hidden = !usable || !chat || !state.transcript.length;
     form.hidden = !chat;
     input.disabled = !usable || !!state.busy;
@@ -269,9 +274,9 @@
     if (state.view === 'archived') return renderArchived();
 
     if (!state.transcript.length && !state.proposals.length && !state.busy) {
-      log.appendChild(el('p', 'spa-ai-hint spa-ai-welcome', cfg.welcome || t.empty));
+      log.appendChild(el('p', 'spa-ai-hint spa-ai-welcome', state.ticket === 0 ? t.admin_empty : (cfg.welcome || t.empty)));
       var chips = el('div', 'spa-ai-chips');
-      (t.suggestions || []).forEach(function (s) {
+      ((state.ticket === 0 ? t.admin_suggestions : t.suggestions) || []).forEach(function (s) {
         chips.appendChild(button('spa-ai-chip', s, function () {
           input.value = s;
           input.focus();
@@ -456,7 +461,7 @@
     state.error = '';
     state.view = 'chat';
     render();
-    if (!id) return Promise.resolve();
+    if (id < 0) return Promise.resolve();
     return request('GET', '/chat', { ticket_id: String(id) }).then(function (json) {
       if (state.ticket === id) apply(json);
     }).catch(fail).then(render);
@@ -469,7 +474,7 @@
   }
 
   function send(text) {
-    if (!state.ticket || state.busy) return;
+    if (state.ticket < 0 || state.busy) return;
     var id = state.ticket;
     state.error = '';
     state.transcript = state.transcript.concat([{ role: 'user', text: text }]);
@@ -525,7 +530,7 @@
 
   function reset() {
     var id = state.ticket;
-    if (!id) return;
+    if (id < 0) return;
     request('POST', '/reset', { ticket_id: String(id) }).then(apply).catch(fail).then(render);
   }
 
@@ -565,6 +570,11 @@
    */
   function refreshTicket(id) {
     var $ = window.jQuery;
+    if (id === 0) {
+      // Settings changed: reload the admin page to show them.
+      window.setTimeout(function () { window.location.reload(); }, 400);
+      return;
+    }
     window.setTimeout(function () {
       if (document.querySelector('.spb-board')) {
         history.replaceState(null, '', location.pathname + location.search + (boardDrawer() ? '#spb-ticket=' + id : ''));

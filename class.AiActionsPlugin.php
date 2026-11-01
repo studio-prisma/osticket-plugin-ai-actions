@@ -44,6 +44,7 @@ require_once __DIR__ . '/src/AiActionsController.php';
 require_once __DIR__ . '/src/AiActionsAgents.php';
 require_once __DIR__ . '/src/AiActionsJobs.php';
 require_once __DIR__ . '/src/AiActionsAdmin.php';
+require_once __DIR__ . '/src/AiActionsAdminTools.php';
 require_once __DIR__ . '/src/AiActionsRules.php';
 require_once __DIR__ . '/src/AiActionsGuard.php';
 require_once __DIR__ . '/src/AiActionsAutomation.php';

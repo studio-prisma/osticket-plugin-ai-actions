@@ -24,6 +24,10 @@ final class AiActionsAssets
     /** Agent-panel pages that load the script. Downloads (print, zip) are skipped. */
     private const PAGES = array('index.php', 'tickets.php');
 
+    /** Admin-panel pages where admins get the settings chat (0.5.0). */
+    private const ADMIN_PAGES = array('settings.php', 'helptopics.php', 'filters.php', 'slas.php', 'departments.php',
+                                      'teams.php', 'lists.php', 'canned.php', 'logs.php', 'plugins.php', 'admin.php');
+
     public static function version(): string
     {
         $mtime = 0;
@@ -58,7 +62,7 @@ final class AiActionsAssets
         if ($m[1] === 'ajax.php') {
             return (bool) preg_match('#^/board/?$#', $pathInfo);
         }
-        if (!in_array($m[1], self::PAGES, true)) {
+        if (!in_array($m[1], self::PAGES, true) && !in_array($m[1], self::ADMIN_PAGES, true)) {
             return false;
         }
         $a = is_string($get['a'] ?? null) ? $get['a'] : '';
@@ -120,6 +124,9 @@ final class AiActionsAssets
             'undo_window' => AiActionsRunStore::UNDO_WINDOW,
             'idle_hours'  => AiActionsChatStore::IDLE_HOURS,
             'keep_days'   => $s['history_days'],
+            // Settings chat on admin pages, for admins only (the server checks again).
+            'admin'       => $staff instanceof Staff && $staff->isAdmin()
+                && in_array(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')), self::ADMIN_PAGES, true),
         );
         return sprintf(
             "\n<link rel=\"stylesheet\" href=\"%s/assets/ai-actions.css?v=%s\">"

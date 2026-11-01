@@ -32,6 +32,17 @@ final class AiActionsPlanner
     /** @var string[]|null write tools a rule allows; null = all */
     private $allowed;
 
+    /** @var bool admin conversation: only the admin tools (AiActionsAdminTools) */
+    private $admin = false;
+
+    /** The planner for the admin chat: settings tools only, no ticket tools, no read tools. */
+    public static function forAdmin(AiActionsLlm $llm): self
+    {
+        $p = new self($llm, array(), null, array());
+        $p->admin = true;
+        return $p;
+    }
+
     public function __construct(AiActionsLlm $llm, ?array $choices = null, ?callable $reader = null, ?array $allowed = null)
     {
         $this->llm = $llm;
@@ -62,7 +73,9 @@ final class AiActionsPlanner
     public function turn(string $system, array $history, array $userBlocks): array
     {
         $tools = array_merge(AiActionsTools::definitions($this->send), AiActionsExtensions::definitions());
-        if ($this->allowed !== null) {
+        if ($this->admin) {
+            $tools = AiActionsAdminTools::definitions();
+        } elseif ($this->allowed !== null) {
             $allowed = $this->allowed;
             $tools = array_values(array_filter($tools, static function ($t) use ($allowed) {
                 return in_array($t['name'], $allowed, true);
@@ -188,6 +201,15 @@ final class AiActionsPlanner
     {
         $name = (string) ($block['name'] ?? '');
         $id = (string) ($block['id'] ?? '');
+        if ($this->admin) {
+            $input = AiActionsAdminTools::has($name) ? AiActionsAdminTools::validate($name, $block['input'] ?? null) : null;
+            if ($input === null || count($changes) >= self::MAX_CHANGES) {
+                $rejected++;
+                return self::result($id, 'Unknown tool, invalid input, an ID not in <admin_data>, or too many changes. Nothing was queued.', true);
+            }
+            $changes[] = array('action' => $name, 'input' => $input);
+            return self::result($id, 'Queued. It runs only after the admin confirms the preview.', false);
+        }
         if ($this->reader && in_array($name, AiActionsReaders::NAMES, true)) {
             $input = $block['input'] ?? null;
             if (!is_array($input) || count($input) !== 1 || !is_string(reset($input))) {

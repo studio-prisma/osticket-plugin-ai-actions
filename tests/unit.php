@@ -156,7 +156,8 @@ check('assets: subfolder install', AiActionsAssets::isPage('/help/scp/index.php'
 check('assets: PJAX fragment skipped', !AiActionsAssets::isPage('/scp/tickets.php', 'GET', array(), true));
 check('assets: POST skipped', !AiActionsAssets::isPage('/scp/tickets.php', 'POST', array(), false));
 check('assets: downloads skipped', !AiActionsAssets::isPage('/scp/tickets.php', 'GET', array('a' => 'print'), false));
-check('assets: other pages skipped', !AiActionsAssets::isPage('/scp/admin.php', 'GET', array(), false)
+check('assets: admin pages get the settings chat, other pages are skipped', AiActionsAssets::isPage('/scp/helptopics.php', 'GET', array(), false)
+    && !AiActionsAssets::isPage('/scp/staff.php', 'GET', array(), false) && !AiActionsAssets::isPage('/scp/emails.php', 'GET', array(), false)
     && !AiActionsAssets::isPage('/tickets.php', 'GET', array(), false));
 check('assets: html detection', AiActionsAssets::isHtml(array()) && AiActionsAssets::isHtml(array('Content-Type: text/html; charset=UTF-8'))
     && !AiActionsAssets::isHtml(array('Content-type: application/pdf')));
@@ -823,6 +824,53 @@ check('guard: AI notice appended when on, not when off', AiActionsAutomation::wi
     && AiActionsAutomation::withDisclosure('Hi', array('ai_notice' => false) + $on) === 'Hi');
 check('settings: link domains cleaned, notice on by default', AiActionsController::domains("https://www.Example.com/\nsub.x.de,  nonsense") === array('example.com', 'sub.x.de')
     && AiActionsController::normalise(array())['ai_notice'] === true && AiActionsController::normalise(array('ai_notice' => 0))['ai_notice'] === false);
+
+// ------------------------------------------------------------ admin tools
+
+$exists = function (string $type, int $id): bool {
+    return in_array($id, array(1, 2, 3), true) || $id === 2 * 1000000 + 1;
+};
+$canned = array('id' => '', 'title' => 'Password reset', 'response' => 'Hello', 'enabled' => '');
+check('admin: new canned response accepted', AiActionsAdminTools::validate('save_canned', $canned, $exists) === $canned);
+check('admin: new objects need their required fields', AiActionsAdminTools::validate('save_canned', array('title' => '') + $canned, $exists) === null
+    && AiActionsAdminTools::validate('save_sla', array('id' => '', 'name' => 'Gold', 'grace_hours' => '', 'enabled' => ''), $exists) === null);
+check('admin: unknown IDs, bad enabled values and extra keys refused',
+    AiActionsAdminTools::validate('save_canned', array('id' => '99') + $canned, $exists) === null
+    && AiActionsAdminTools::validate('save_canned', array('enabled' => 'maybe') + $canned, $exists) === null
+    && AiActionsAdminTools::validate('save_canned', $canned + array('dept' => '1'), $exists) === null
+    && AiActionsAdminTools::validate('save_topic', array('id' => '1', 'name' => '', 'department' => '99', 'sla' => '', 'enabled' => ''), $exists) === null);
+check('admin: SLA grace period bounded', AiActionsAdminTools::validate('save_sla', array('id' => '1', 'name' => '', 'grace_hours' => '9000', 'enabled' => ''), $exists) === null
+    && AiActionsAdminTools::validate('save_sla', array('id' => '1', 'name' => '', 'grace_hours' => '48', 'enabled' => ''), $exists) !== null);
+check('admin: a list item must belong to the named list', AiActionsAdminTools::validate('save_list_item', array('id' => '2', 'list' => '1', 'value' => 'x', 'enabled' => ''), $exists) !== null
+    && AiActionsAdminTools::validate('save_list_item', array('id' => '3', 'list' => '1', 'value' => 'x', 'enabled' => ''), $exists) === null);
+check('admin: no delete tool, nothing outside the four areas', AiActionsAdminTools::validate('delete_topic', array(), $exists) === null
+    && array_column(AiActionsAdminTools::definitions(), 'name') === AiActionsAdminTools::NAMES);
+check('admin: diff names only what changes', AiActionsAdminTools::diff(array('name' => 'Gold', 'grace_hours' => '24', 'enabled' => 'yes'),
+    array('id' => '1', 'name' => 'Gold', 'grace_hours' => '48', 'enabled' => '')) === array('grace_hours' => array('24', '48')));
+
+/** Plans one admin change, or a ticket tool to prove it's refused. */
+final class AdminOnceLlm implements AiActionsLlm
+{
+    public $tool;
+    public $tools = array();
+    public function __construct(string $tool) { $this->tool = $tool; }
+    public function send(string $system, array $messages, array $tools): array
+    {
+        $this->tools = array_column($tools, 'name');
+        if ((end($messages)['content'][0]['type'] ?? '') === 'tool_result') {
+            return array('stop' => 'end_turn', 'content' => array(array('type' => 'text', 'text' => 'ok')), 'usage' => array());
+        }
+        $input = $this->tool === 'set_status' ? array('status' => '3')
+            : array('id' => '', 'title' => 'Hello there', 'response' => 'Text', 'enabled' => '');
+        return array('stop' => 'tool_use', 'content' => array(array('type' => 'tool_use', 'id' => 't', 'name' => $this->tool, 'input' => $input)), 'usage' => array());
+    }
+}
+$llm = new AdminOnceLlm('set_status');
+$r = AiActionsPlanner::forAdmin($llm)->turn('SYS', array(), array(array('type' => 'text', 'text' => 'q')));
+check('admin: the settings chat offers only settings tools; ticket tools are refused', $r['rejected'] === 1 && !$r['changes']
+    && $llm->tools === AiActionsAdminTools::NAMES);
+check('admin: system prompt names the limits', strpos(AiActionsAdminTools::system('Desk', 'now'), 'You never delete') !== false
+    && strpos(AiActionsAdminTools::system('Desk', 'now'), 'roles, permissions') !== false);
 
 echo "\n$count checks, $failures failed\n";
 exit($failures ? 1 : 0);

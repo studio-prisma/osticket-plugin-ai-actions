@@ -189,6 +189,12 @@ final class AiActionsController
         if (!self::allowed($thisstaff)) {
             return self::json(404, array('error' => 'not_found'));
         }
+        if (self::adminTarget($_GET)) {
+            if (!AiActionsAdmin::admin($thisstaff)) {
+                return self::json(404, array('error' => 'not_found'));
+            }
+            return self::json(200, self::adminPayload(AiActionsChatStore::load((int) $thisstaff->getId(), 0)));
+        }
         $ticket = self::visibleTicket($thisstaff, $_GET['ticket_id'] ?? 0);
         if (!$ticket) {
             return self::json(404, array('error' => 'not_found'));
@@ -202,6 +208,9 @@ final class AiActionsController
     {
         global $thisstaff;
 
+        if (self::adminTarget($_POST)) {
+            return self::adminPlan();
+        }
         $ticket = self::guard();
         $prompt = self::promptText($_POST['prompt'] ?? '');
         if ($prompt === null) {
@@ -305,6 +314,9 @@ final class AiActionsController
             }
             return self::json(422, array('error' => 'expired'));
         }
+        if ((int) $run['ticket_id'] === 0) {
+            return self::adminRun($run);
+        }
         $ticket = self::visibleTicket($thisstaff, $run['ticket_id']);
         if (!$ticket) {
             AiActionsRunStore::finish($run['id'], array());
@@ -373,6 +385,9 @@ final class AiActionsController
         $run = AiActionsRunStore::claimUndo((string) ($_POST['plan_id'] ?? ''), $staffId);
         if (!$run) {
             return self::json(422, array('error' => 'undo_expired'));
+        }
+        if ((int) $run['ticket_id'] === 0) {
+            return self::adminUndo($run);
         }
         $ticket = self::visibleTicket($thisstaff, $run['ticket_id']);
         if (!$ticket) {
@@ -450,6 +465,20 @@ final class AiActionsController
     {
         global $thisstaff;
 
+        if (self::adminTarget($_POST)) {
+            self::guard(false);
+            if (!AiActionsAdmin::admin($thisstaff)) {
+                return self::json(404, array('error' => 'not_found'));
+            }
+            $staffId = (int) $thisstaff->getId();
+            foreach (AiActionsChatStore::load($staffId, 0)['transcript'] as $item) {
+                if (($item['plan']['state'] ?? '') === 'open') {
+                    AiActionsRunStore::cancel((string) $item['plan']['id'], $staffId, 'discarded');
+                }
+            }
+            AiActionsChatStore::reset($staffId, 0);
+            return self::json(200, self::adminPayload(AiActionsChatStore::load($staffId, 0)));
+        }
         $ticket = self::guard();
         $staffId = (int) $thisstaff->getId();
         $chat = AiActionsChatStore::load($staffId, (int) $ticket->getId());
@@ -513,6 +542,145 @@ final class AiActionsController
             return self::json(422, array('error' => $r['error'] ?? 'expired'));
         }
         return self::json(200, array('results' => $r['results'] ?? array()));
+    }
+
+    /** ticket_id=0 in a request: the admin conversation about settings. */
+    private static function adminTarget(array $req): bool
+    {
+        return isset($req['ticket_id']) && is_scalar($req['ticket_id']) && (string) $req['ticket_id'] === '0';
+    }
+
+    private static function adminPayload(array $chat): array
+    {
+        return array(
+            'ticket'     => array('id' => 0, 'number' => ''),
+            'admin'      => true,
+            'proposals'  => array(),
+            'transcript' => AiActionsChatStore::forClient($chat['transcript']),
+            'turns_left' => max(0, AiActionsChatStore::MAX_TURNS - (int) $chat['turns']),
+        );
+    }
+
+    /** POST /ai/plan with ticket_id=0: an admin's request about settings. */
+    private static function adminPlan(): string
+    {
+        global $thisstaff;
+
+        self::guard(false);
+        if (!AiActionsAdmin::admin($thisstaff)) {
+            return self::json(404, array('error' => 'not_found'));
+        }
+        $prompt = self::promptText($_POST['prompt'] ?? '');
+        if ($prompt === null) {
+            return self::json(422, array('error' => 'invalid_prompt'));
+        }
+        $staffId = (int) $thisstaff->getId();
+        if (!AiActionsUsage::lock($staffId)) {
+            return self::json(422, array('error' => 'busy'));
+        }
+        $blocked = AiActionsUsage::blocked(AiActionsUsage::today($staffId), self::$settings['daily_requests'], self::$settings['daily_tokens']);
+        if ($blocked !== null) {
+            return self::json(422, array('error' => $blocked));
+        }
+        $chat = AiActionsChatStore::load($staffId, 0);
+        if ($chat['turns'] >= AiActionsChatStore::MAX_TURNS) {
+            return self::json(422, array('error' => 'conversation_full'));
+        }
+        $llm = self::llm();
+        if (!$llm) {
+            return self::json(422, array('error' => 'not_configured'));
+        }
+        AiActionsUsage::countRequest($staffId);
+        foreach ($chat['transcript'] as $item) {
+            $open = $item['plan'] ?? null;
+            if ($open && ($open['state'] ?? '') === 'open') {
+                $state = AiActionsRunStore::cancel((string) $open['id'], $staffId, 'superseded') ? 'superseded' : 'expired';
+                $chat['transcript'] = AiActionsChatStore::markPlan($chat['transcript'], (string) $open['id'], $state, array());
+                $chat['pending'][] = array('state' => $state, 'results' => array());
+            }
+        }
+        $data = AiActionsAdminTools::data();
+        $now = AiActionsTime::now(AiActionsTime::zone($thisstaff))->format('Y-m-d H:i');
+        $blocks = $chat['messages']
+            ? AiActionsPlanner::nextMessage($data, $chat['pending'], $prompt)
+            : array(array('type' => 'text', 'text' => $data), array('type' => 'text', 'text' => "<agent_request>
+" . $prompt . "
+</agent_request>"));
+        try {
+            $result = AiActionsPlanner::forAdmin($llm)->turn(AiActionsAdminTools::system(self::helpdesk(), $now), $chat['messages'], $blocks);
+        } catch (AiActionsLlmError $e) {
+            error_log(sprintf('ai-actions: model call failed (%s) %s', $e->kind, $e->getMessage()));
+            $code = array('auth' => 'not_configured', 'unavailable' => 'unavailable', 'refused' => 'refused')[$e->kind] ?? 'generic';
+            return self::json(422, array('error' => $code));
+        }
+        AiActionsUsage::addTokens($staffId, (int) $result['usage']['input'], (int) $result['usage']['output']);
+        $preview = array();
+        foreach ($result['changes'] as $c) {
+            $preview[] = AiActionsAdminTools::summary($c['action'], $c['input']);
+        }
+        $planId = $result['changes'] ? AiActionsRunStore::create($staffId, 0, $prompt, $result['changes']) : null;
+        $chat['transcript'][] = array('role' => 'user', 'text' => $prompt);
+        $reply = array('role' => 'ai', 'text' => $result['answer']);
+        if ($planId) {
+            $reply['plan'] = array('id' => $planId, 'changes' => $preview, 'state' => 'open');
+        }
+        $chat['transcript'][] = $reply;
+        $chat['messages'] = $result['messages'];
+        $chat['pending'] = array();
+        $chat['turns']++;
+        AiActionsChatStore::save($staffId, 0, $chat);
+        return self::json(200, self::adminPayload($chat));
+    }
+
+    /** Runs a confirmed settings plan: each change checked again, logged in osTicket's system log. */
+    private static function adminRun(array $run): string
+    {
+        global $thisstaff, $ost;
+
+        $staffId = (int) $thisstaff->getId();
+        if (!AiActionsAdmin::admin($thisstaff)) {
+            AiActionsRunStore::finish($run['id'], array());
+            return self::json(404, array('error' => 'not_found'));
+        }
+        $results = array();
+        foreach ($run['changes'] as $c) {
+            $input = AiActionsAdminTools::validate((string) ($c['action'] ?? ''), $c['input'] ?? null);
+            $line = $input !== null ? AiActionsAdminTools::summary($c['action'], $input) : array('label' => (string) ($c['action'] ?? ''), 'value' => '');
+            $r = $input !== null ? AiActionsAdminTools::run($c['action'], $input, $thisstaff) : array('ok' => false, 'error' => 'rejected');
+            $results[] = $line + array('ok' => $r['ok'], 'error' => $r['error'] ?? null, 'message' => $r['message'] ?? '',
+                                        'action' => (string) ($c['action'] ?? ''), 'unchanged' => false, 'previous' => $r['previous'] ?? null);
+            if ($ost && $r['ok']) {
+                $ost->logInfo('AI admin change', sprintf('%s by %s: %s', $line['label'], $thisstaff->getUserName(), $line['value']), false);
+            }
+        }
+        AiActionsRunStore::finish($run['id'], $results);
+        $public = self::publicResults($results);
+        $undoable = (bool) array_filter($results, function ($r) {
+            return $r['ok'];
+        });
+        AiActionsAutomation::logAdmin($staffId, (string) $run['prompt'], $results);
+        AiActionsChatStore::planOutcome($staffId, 0, $run['id'], 'done', $public,
+            $undoable ? array('undo_until' => time() + AiActionsRunStore::UNDO_WINDOW) : array());
+        return self::json(200, array('results' => $public));
+    }
+
+    private static function adminUndo(array $run): string
+    {
+        global $thisstaff;
+
+        $staffId = (int) $thisstaff->getId();
+        $undone = array();
+        foreach (array_reverse($run['results']) as $r) {
+            if (empty($r['ok']) || empty($r['action'])) {
+                continue;
+            }
+            $u = AiActionsAdminTools::undo((string) $r['action'], $r['previous'] ?? null, $thisstaff);
+            $undone[] = array('label' => (string) ($r['label'] ?? ''), 'value' => (string) ($r['value'] ?? ''),
+                              'ok' => $u['ok'], 'error' => $u['error'] ?? null, 'message' => $u['message'] ?? '');
+        }
+        AiActionsRunStore::finishUndo($run['id'], $run['results'], $undone);
+        AiActionsChatStore::planOutcome($staffId, 0, $run['id'], 'undone', null, array('undo' => $undone));
+        return self::json(200, array('results' => $undone));
     }
 
     private static function chatPayload($ticket, array $chat): array

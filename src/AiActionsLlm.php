@@ -35,6 +35,48 @@ interface AiActionsLlm
  */
 final class AiActionsFakeLlm implements AiActionsLlm
 {
+    /**
+     * Settings chat: "canned" creates a canned response, "rename sla" renames
+     * the first SLA plan, "disable topic" disables the first active help
+     * topic, "list item" adds an item to the first list, "delete" asks for
+     * nothing (the tools can't delete).
+     */
+    private static function admin(array $messages, array $usage): array
+    {
+        $all = '';
+        foreach ($messages as $m) {
+            foreach ((array) ($m['content'] ?? array()) as $b) {
+                $all .= is_string($b['text'] ?? null) ? $b['text'] . "\n" : '';
+            }
+        }
+        $last = end($messages);
+        if (($last['content'][0]['type'] ?? '') === 'tool_result') {
+            return array('stop' => 'end_turn', 'usage' => $usage, 'content' => array(array('type' => 'text', 'text' => 'Planned. Please check the preview.')));
+        }
+        $req = preg_match('/<agent_request>(.*?)<\/agent_request>(?!.*<agent_request>)/s', $all, $m) ? strtolower($m[1]) : '';
+        $first = static function (string $section) use ($all): string {
+            return preg_match('/' . $section . '[^\n]*\n- (\d+):/', $all, $m) ? $m[1] : '';
+        };
+        $empty = array('id' => '', 'enabled' => '');
+        $call = null;
+        if (strpos($req, 'canned') !== false) {
+            $call = array('save_canned', $empty + array('title' => 'Password reset', 'response' => "Hello,\n\nyour password was reset."));
+        } elseif (strpos($req, 'rename sla') !== false) {
+            $call = array('save_sla', array('id' => $first('SLA plans'), 'name' => 'Renamed SLA', 'grace_hours' => '', 'enabled' => ''));
+        } elseif (strpos($req, 'disable topic') !== false) {
+            $call = array('save_topic', array('id' => $first('Help topics'), 'name' => '', 'department' => '', 'sla' => '', 'enabled' => 'no'));
+        } elseif (strpos($req, 'list item') !== false && preg_match('/- list (\d+):/', $all, $l)) {
+            $call = array('save_list_item', array('id' => '', 'list' => $l[1], 'value' => 'Fake item', 'enabled' => ''));
+        }
+        if (!$call) {
+            return array('stop' => 'end_turn', 'usage' => $usage, 'content' => array(array('type' => 'text', 'text' => 'I can only create, change or disable these settings.')));
+        }
+        return array('stop' => 'tool_use', 'usage' => $usage, 'content' => array(
+            array('type' => 'text', 'text' => 'Planned.'),
+            array('type' => 'tool_use', 'id' => 'toolu_admin_' . substr(md5($req), 0, 8), 'name' => $call[0], 'input' => $call[1]),
+        ));
+    }
+
     /** @var string Y-m-d in the agent's time zone */
     private $today;
 
@@ -47,6 +89,10 @@ final class AiActionsFakeLlm implements AiActionsLlm
     {
         $last = end($messages);
         $usage = array('input' => 0, 'output' => 0);
+        // The settings chat: a few words, each one planning one change from <admin_data>.
+        if (strpos($system, 'You help an administrator') === 0) {
+            return self::admin($messages, $usage);
+        }
         // The send guard's reviewer: refuses replies that carry the word "evil".
         if (strpos($system, 'You review an automatic email reply') === 0) {
             $all = (string) json_encode($messages);
