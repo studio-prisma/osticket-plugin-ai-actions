@@ -75,6 +75,9 @@ final class AiActionsI18n
                 'not_found'         => 'Ticket nicht gefunden oder kein Zugriff.',
                 'undo_expired'      => 'Zu spät: Rückgängig geht nur kurz nach dem Ausführen.',
                 'draft_exists'      => 'es gibt schon einen Antwortentwurf, erst senden oder löschen',
+                'busy'              => 'Deine vorige Nachricht läuft noch. Bitte kurz warten.',
+                'limit_requests'    => 'Tageslimit für Nachrichten erreicht. Morgen geht es weiter, oder der Admin hebt das Limit an.',
+                'limit_tokens'      => 'Tageslimit für die AI erreicht. Morgen geht es weiter, oder der Admin hebt das Limit an.',
             ),
         ) : array(
             'title'        => 'AI assistant',
@@ -139,6 +142,9 @@ final class AiActionsI18n
                 'not_found'         => 'Ticket not found or no access.',
                 'undo_expired'      => 'Too late: undo works only shortly after running.',
                 'draft_exists'      => 'a reply draft already exists, send or delete it first',
+                'busy'              => 'Your previous message is still running. Please wait a moment.',
+                'limit_requests'    => 'Daily message limit reached. It resets tomorrow, or your admin can raise it.',
+                'limit_tokens'      => 'Daily AI limit reached. It resets tomorrow, or your admin can raise it.',
             ),
         );
     }

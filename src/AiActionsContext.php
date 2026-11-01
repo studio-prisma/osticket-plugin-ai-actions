@@ -23,7 +23,7 @@ final class AiActionsContext
      *
      * @return array{text:string, last:int} last = highest entry ID seen
      */
-    public static function data($ticket, int $since = 0): array
+    public static function data($ticket, int $since = 0, int $max = self::THREAD_MAX): array
     {
         $owner = $ticket->getOwner();
         $org = $owner && $owner->getOrganization() ? (string) $owner->getOrganization()->getName() : '';
@@ -52,7 +52,7 @@ final class AiActionsContext
             );
         }
 
-        return array('text' => self::render($facts, $entries, $since > 0), 'last' => $last);
+        return array('text' => self::render($facts, $entries, $since > 0, $max), 'last' => $last);
     }
 
     /**
@@ -61,7 +61,7 @@ final class AiActionsContext
      * @param bool $update later turn of a conversation: only new entries
      * Public for the unit tests.
      */
-    public static function render(array $facts, array $entries, bool $update = false): string
+    public static function render(array $facts, array $entries, bool $update = false, int $max = self::THREAD_MAX): string
     {
         $lines = array($update ? 'Ticket facts now:' : 'Ticket facts:');
         foreach ($facts as $k => $v) {
@@ -83,7 +83,7 @@ final class AiActionsContext
             $chunk = sprintf("\n[%s] %s by %s:\n%s\n", self::clean($e['created'], 40), $label,
                 self::clean($e['poster'], 120), self::clean($e['text'], self::ENTRY_MAX));
             $len = self::length($chunk);
-            if ($used + $len > self::THREAD_MAX) {
+            if ($used + $len > $max) {
                 $skipped++;
                 continue;
             }

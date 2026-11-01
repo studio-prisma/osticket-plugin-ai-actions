@@ -23,7 +23,8 @@ final class AiActionsController
 
     /** @var array */
     private static $settings = array('enabled' => false, 'roles' => array(), 'model' => 'claude-opus-5-5',
-                                     'effort' => 'low', 'key_file' => '');
+                                     'effort' => 'low', 'key_file' => '', 'daily_requests' => 100,
+                                     'daily_tokens' => 500000, 'thread_chars' => 12000);
 
     public static function configure(array $raw): void
     {
@@ -46,7 +47,23 @@ final class AiActionsController
             'model'    => in_array($model[0] ?? '', self::MODELS, true) ? $model[0] : self::MODELS[0],
             'effort'   => in_array($effort[0] ?? '', self::EFFORTS, true) ? $effort[0] : 'low',
             'key_file' => is_string($raw['key_file'] ?? null) ? trim($raw['key_file']) : '',
+            // 0 = no limit, for admins who cap spend in the Anthropic console instead.
+            'daily_requests' => self::number($raw['daily_requests'] ?? null, 100, 0, 10000),
+            'daily_tokens'   => self::number($raw['daily_tokens'] ?? null, 500000, 0, 100000000),
+            'thread_chars'   => self::number($raw['thread_chars'] ?? null, 12000, 2000, 50000),
         );
+    }
+
+    /** Whole number from a setting, $default when empty or not a number, clamped. */
+    private static function number($raw, int $default, int $min, int $max): int
+    {
+        if (is_int($raw)) {
+            $raw = (string) $raw;
+        }
+        if (!is_string($raw) || !preg_match('/^\s*\d{1,12}\s*$/', $raw)) {
+            return $default;
+        }
+        return max($min, min($max, (int) $raw));
     }
 
     /**
@@ -119,6 +136,19 @@ final class AiActionsController
         }
         $staffId = (int) $thisstaff->getId();
         $ticketId = (int) $ticket->getId();
+
+        // One message at a time per agent, taken before the conversation is
+        // read so a second tab can't work on a stale copy. The lock ends with
+        // the request (self::json() exits), whatever happens in between.
+        if (!AiActionsUsage::lock($staffId)) {
+            return self::json(422, array('error' => 'busy'));
+        }
+        $blocked = AiActionsUsage::blocked(AiActionsUsage::today($staffId),
+            self::$settings['daily_requests'], self::$settings['daily_tokens']);
+        if ($blocked !== null) {
+            return self::json(422, array('error' => $blocked));
+        }
+
         $chat = AiActionsChatStore::load($staffId, $ticketId);
         if ($chat['turns'] >= AiActionsChatStore::MAX_TURNS) {
             return self::json(422, array('error' => 'conversation_full'));
@@ -127,6 +157,9 @@ final class AiActionsController
         if (!$llm) {
             return self::json(422, array('error' => 'not_configured'));
         }
+        // Counted before the call: a failed or slow call still counts, so
+        // retries can't run past the limit.
+        AiActionsUsage::countRequest($staffId);
 
         // A new message replaces a plan the agent left open.
         foreach ($chat['transcript'] as $item) {
@@ -153,6 +186,7 @@ final class AiActionsController
             $code = array('auth' => 'not_configured', 'unavailable' => 'unavailable', 'refused' => 'refused')[$e->kind] ?? 'generic';
             return self::json(422, array('error' => $code));
         }
+        AiActionsUsage::addTokens($staffId, (int) $result['usage']['input'], (int) $result['usage']['output']);
 
         // Stored and shown in the order they will run, so preview line i is result i.
         $result['changes'] = AiActionsTools::inRunOrder($result['changes']);
@@ -429,7 +463,7 @@ final class AiActionsController
     {
         $tz = self::timezone($staff);
         $now = self::now($tz);
-        $data = AiActionsContext::data($ticket, $seenEntry);
+        $data = AiActionsContext::data($ticket, $seenEntry, self::$settings['thread_chars']);
         return array(
             'now'        => $now->format('Y-m-d H:i'),
             'weekday'    => $now->format('l'),

@@ -76,6 +76,33 @@ class AiActionsConfig extends PluginConfig
                     'high'   => 'High (slow, for long or tangled threads)',
                 ),
             )),
+
+            'sec_limits' => new SectionBreakField(array(
+                'label' => 'Limits per agent and day',
+            )),
+
+            'daily_requests' => new TextboxField(array(
+                'label'         => 'Messages',
+                'default'       => '100',
+                'hint'          => 'Messages to the AI per agent and day. 0 = no limit.',
+                'configuration' => array('size' => 8, 'length' => 6, 'validator' => 'number'),
+            )),
+
+            'daily_tokens' => new TextboxField(array(
+                'label'         => 'Tokens',
+                'default'       => '500000',
+                'hint'          => 'Input plus output tokens per agent and day. A message costs about '
+                                 . '1,000 to 5,000. 0 = no limit.',
+                'configuration' => array('size' => 12, 'length' => 10, 'validator' => 'number'),
+            )),
+
+            'thread_chars' => new TextboxField(array(
+                'label'         => 'Thread length',
+                'default'       => '12000',
+                'hint'          => 'Characters of the ticket thread the AI reads, newest first '
+                                 . '(2,000 to 50,000). More context, more tokens.',
+                'configuration' => array('size' => 8, 'length' => 6, 'validator' => 'number'),
+            )),
         );
     }
 

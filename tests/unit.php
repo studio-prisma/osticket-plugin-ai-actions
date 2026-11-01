@@ -472,6 +472,29 @@ $ordered = AiActionsTools::inRunOrder(array(
 ));
 check('text: notes run before transfer and status', array_column($ordered, 'action') === array('set_due_date', 'add_internal_note', 'transfer', 'set_status'));
 
+// ------------------------------------------------------------------- limits
+
+check('limits: under both limits', AiActionsUsage::blocked(array('requests' => 99, 'tokens' => 499999), 100, 500000) === null);
+check('limits: requests checked first', AiActionsUsage::blocked(array('requests' => 100, 'tokens' => 900000), 100, 500000) === 'limit_requests');
+check('limits: tokens', AiActionsUsage::blocked(array('requests' => 1, 'tokens' => 500000), 100, 500000) === 'limit_tokens');
+check('limits: 0 means no limit', AiActionsUsage::blocked(array('requests' => 99999, 'tokens' => 99999999), 0, 0) === null);
+check('limits: lock name per agent', AiActionsUsage::lockName(7) === 'spa_ai_actions_7' && AiActionsUsage::lockName(7) !== AiActionsUsage::lockName(8));
+
+$s = AiActionsController::normalise(array());
+check('settings: limit defaults', $s['daily_requests'] === 100 && $s['daily_tokens'] === 500000 && $s['thread_chars'] === 12000);
+$s = AiActionsController::normalise(array('daily_requests' => ' 0 ', 'daily_tokens' => '999999999999', 'thread_chars' => '10'));
+check('settings: limits clamped, 0 kept', $s['daily_requests'] === 0 && $s['daily_tokens'] === 100000000 && $s['thread_chars'] === 2000);
+$s = AiActionsController::normalise(array('daily_requests' => '-5', 'daily_tokens' => 'lots', 'thread_chars' => array()));
+check('settings: junk falls back to defaults', $s['daily_requests'] === 100 && $s['daily_tokens'] === 500000 && $s['thread_chars'] === 12000);
+
+$many = array();
+for ($i = 0; $i < 10; $i++) {
+    $many[] = array('type' => 'M', 'poster' => 'C', 'created' => "x$i", 'text' => str_repeat('z', 900) . " #$i");
+}
+$short = AiActionsContext::render(array(), $many, false, 2000);
+check('limits: thread length setting applies', strpos($short, '#0') !== false && strpos($short, '#3') === false
+    && strpos($short, 'older entries left out') !== false);
+
 // ------------------------------------------------------------------- store
 
 check('store: id format', AiActionsRunStore::isId(str_repeat('a1', 16)) && !AiActionsRunStore::isId("' OR 1=1 --")
