@@ -49,7 +49,7 @@ Use a key from a separate workspace with a low spend limit. Never put the key in
 Two stacks can run side by side, e.g. one live for clicking around and one with the fake for the suite. Each has its own folder, project name and ports:
 
 ```bash
-SPA_LOCAL=dev/local-2 SPA_PROJECT=spa-dev-2 SPA_HTTP_PORT=8090 SPA_MAIL_PORT=8028 ./dev/up.sh
+SPA_LOCAL=dev/local-2 SPA_PROJECT=spa-dev-2 SPA_HTTP_PORT=8094 SPA_MAIL_PORT=8028 ./dev/up.sh
 (cd tests/e2e && SPA_LOCAL=../../dev/local-2 npx playwright test)
 SPA_LOCAL=dev/local-2 ./dev/down.sh
 ```

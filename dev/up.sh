@@ -5,7 +5,7 @@
 # (git-ignored). Nothing secret is part of the repository.
 #
 # A second stack next to the first: SPA_LOCAL=dev/local-2 SPA_PROJECT=spa-dev-2
-# SPA_HTTP_PORT=8090 SPA_MAIL_PORT=8028 ./dev/up.sh (the values are only read
+# SPA_HTTP_PORT=8094 SPA_MAIL_PORT=8028 ./dev/up.sh (the values are only read
 # when its credentials.env is created; afterwards that file decides).
 set -euo pipefail
 

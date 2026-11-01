@@ -27,10 +27,10 @@ class AiActionsConfig extends PluginConfig
             )),
 
             'enabled' => new BooleanField(array(
-                'label'         => 'AI field in the ticket view',
+                'label'         => 'AI assistant in the agent panel',
                 'default'       => false,
                 'configuration' => array(
-                    'desc' => 'Shows the AI field to agents. Changes still need the '
+                    'desc' => 'Shows the chat bubble to agents. Changes still need the '
                             . 'agent\'s own permissions and an explicit confirmation.',
                 ),
             )),
@@ -39,7 +39,7 @@ class AiActionsConfig extends PluginConfig
                 'label'         => 'Agents with these primary roles',
                 'default'       => '',
                 'choices'       => self::roles(),
-                'hint'          => 'Only agents whose primary role is selected see the field. '
+                'hint'          => 'Only agents whose primary role is selected see the chat. '
                                  . 'Nothing selected means nobody.',
                 'configuration' => array('multiselect' => true, 'prompt' => 'None'),
             )),

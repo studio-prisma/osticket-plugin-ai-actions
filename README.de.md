@@ -1,21 +1,48 @@
-# <Projektname>
+# AI Actions für osTicket
 
 [![Validate](https://github.com/studio-prisma/osticket-plugin-ai-actions/actions/workflows/validate.yml/badge.svg)](https://github.com/studio-prisma/osticket-plugin-ai-actions/actions/workflows/validate.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/License-GPL--2.0--or--later-blue.svg)](LICENSE)
 
-Ein Satz: was das tut und für wen.
+Ein Chat im Agenten-Bereich von osTicket, der Anfragen in Alltagssprache über die Claude-API in Ticket-Änderungen übersetzt. Aus „Setze die Fälligkeit auf morgen und weise es Philipp zu“ wird eine Vorschau mit genau diesen zwei Änderungen. Geändert wird erst, wenn der Agent auf **Ausführen** klickt.
 
 **[English version →](README.md)**
 
-> Inhaltsgleich mit `README.md`. Wer eine Fassung ändert, ändert beide im selben PR.
+---
+
+## Was es kann
+
+| | |
+|---|---|
+| Wo | Eine Bubble unten rechts im Agenten-Bereich. Das Gespräch gehört zum offenen Ticket: Ticketansicht oder eine Karte in der Schnellansicht des [Ticket Boards](https://github.com/studio-prisma/osticket-plugin-board) |
+| Fragen | „Was will die Kundin eigentlich?“, „Fasse den Verlauf zusammen“. Beantwortet aus Ticketdaten und Verlauf, es ändert sich nichts |
+| Änderungen | Fälligkeit, Priorität, Zuweisung an Agent oder Team, Abteilung, Status, interne Notiz, Antwortentwurf, Unter-Ticket |
+| Vorschau | Jede geplante Änderung als Zeile mit osTickets eigenen Bezeichnungen, Notizen und Entwürfe mit vollem Text. **Ausführen** oder **Verwerfen** |
+| Rückgängig | 30 Sekunden nach dem Ausführen, für jede Feldänderung (nicht für Notizen, Entwürfe und Unter-Tickets) |
+| Folgefragen | Ein Gespräch pro Agent und Ticket: „und jetzt eine Woche später“ bezieht sich auf das gerade gesetzte Datum. Das Modell erfährt, ob sein letzter Plan ausgeführt, verworfen oder zurückgenommen wurde |
+| Protokoll | Jedes Ausführen und jedes Rückgängig hinterlässt eine interne Notiz „AI-Aktion“ mit Anfrage und Ergebnis jeder Änderung |
+| Grenzen | Nachrichten und Tokens pro Agent und Tag, eine Nachricht gleichzeitig pro Agent |
+
+**Änderungen laufen über osTickets eigenen Code.** Jede Aktion nutzt dieselbe Core-Methode und dieselbe Rechteprüfung wie ihr osTicket-Dialog: `updateField()` für Fälligkeit und Priorität, `assign()`, `release()`, `transfer()`, `setStatus()` mit der Rechte-Matrix des Status-Dialogs, `postNote()`. Die Werte, die das Modell verwenden darf, stammen aus den Listen, die diese Dialoge dem Agenten zeigen, und werden beim Ausführen noch einmal geprüft. Über den Chat kann ein Agent nichts, was er nicht auch von Hand könnte.
+
+**Das Modell plant, der Agent entscheidet.** Schreib-Tools werden nur vorgemerkt. Ein Plan liegt auf dem Server, gebunden an Agent und Ticket, 10 Minuten gültig und einmal ausführbar; der Browser schickt nur seine ID. Es gibt kein Tool für andere Tickets, keins zum Senden von Mails, keins für Netz oder Dateien.
+
+**Ticketinhalt ist Datum, keine Anweisung.** Ticketdaten und Verlauf gehen in einem als nicht vertrauenswürdig markierten Block an das Modell; Block-Tags im Tickettext werden neutralisiert, damit ein Kunde den Block weder beenden noch eine Anfrage fälschen kann. In den Tests hat das Modell jede eingeschleuste Anweisung erkannt und benannt (siehe [SECURITY.md](SECURITY.md)). Die Vorschau ist in jedem Fall das Sicherheitsnetz.
+
+**Kein SDK, keine Abhängigkeiten.** Das Plugin spricht die Messages API über PHPs cURL an (API-Version `2026-10-21`). Es bringt keine Fremdbibliothek mit, die sich im selben PHP-Prozess mit anderen Plugins beißen könnte.
+
+Keine Core-Datei wird verändert. Die Routen laufen über osTickets `scp/ajax.php` (Signal `ajax.scp`); Skript und Stylesheet des Chats kommen per Output-Buffer in die Agenten-Seiten.
 
 ---
 
 ## Voraussetzungen
 
-- Host-Plattform und Versionsbereich — den *geprüften* Bereich nennen, nicht den erhofften
-- Laufzeit-Versionsbereich
-- Was über das Netz erreichbar sein muss
+- osTicket **1.18.x** (getestet: 1.18.4)
+- PHP **8.1 bis 8.4** mit cURL-Erweiterung (Syntax auf allen vier geprüft; die End-to-End-Läufe nutzen 8.3)
+- ausgehendes HTTPS vom Server zu `api.anthropic.com`
+- ein Anthropic-API-Key. Am besten aus einem eigenen Workspace mit Ausgabenlimit
+- optional: [Ticket Board](https://github.com/studio-prisma/osticket-plugin-board) ab 0.3 für den Chat in dessen Schnellansicht
+
+**Datenschutz.** Ticketdaten und Verlauf (Kundennachrichten, Antworten, interne Notizen, bis zur eingestellten Länge) gehen mit jeder Nachricht an Anthropic. Vor dem Einschalten Auftragsverarbeitung mit Anthropic und Datenschutzhinweise prüfen. Die eigenen Tabellen des Plugins behalten Gespräche 12 Stunden, Pläne mit der Anfrage des Agenten 2 Tage und Zählerstände 90 Tage.
 
 ---
 
@@ -25,39 +52,63 @@ Vollständige Anleitung: **[docs/INSTALL.de.md](docs/INSTALL.de.md)** ([english]
 
 Kurzfassung:
 
-1. Paket aus dem [letzten Release](https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/latest) laden.
-2. ...
+1. `ai-actions-<version>.zip` aus dem [letzten Release](https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/latest) laden und nach `include/plugins/` entpacken.
+2. Den API-Key in eine Datei **außerhalb** des osTicket-Verzeichnisses legen, nur für den Webserver lesbar.
+3. Admin-Bereich → Verwalten → Plugins → Neues Plugin hinzufügen → **AI Actions** → Installieren, Instanz anlegen, Key-Datei und Rollen eintragen, aktivieren.
 
 ---
 
 ## Konfiguration
 
-| Einstellung | Default | Zweck |
+| Einstellung | Standard | Zweck |
 |---|---|---|
-| ... | ... | ... |
+| AI assistant in the agent panel | aus | Hauptschalter |
+| Agents with these primary roles | keine | Wer die Bubble sieht. Nichts ausgewählt heißt niemand |
+| API key file | leer | Absoluter Pfad zu einer Datei, die nur den Key enthält. Leer: `ANTHROPIC_API_KEY` aus der Umgebung. Dateien im osTicket-Verzeichnis werden abgelehnt |
+| Model | Claude Opus 5.5 | Oder Claude Sonnet 5.5 (günstiger) |
+| Effort | Low | Wie lange das Modell nachdenkt. Low reicht für die meisten Anfragen |
+| Messages | 100 | Pro Agent und Tag, 0 = kein Limit |
+| Tokens | 500.000 | Input plus Output pro Agent und Tag, 0 = kein Limit |
+| Thread length | 12.000 | Zeichen des Verlaufs, die das Modell liest, neueste zuerst (2.000 bis 50.000) |
+
+Der Key ist nie eine Einstellung: osTicket speichert Plugin-Einstellungen im Klartext in seiner Datenbank.
+
+Eine Nachricht kostet meist 1.000 bis 5.000 Tokens, mit Opus 5.5 bei niedrigem Effort etwa einen Cent. Eine Antwort dauert 3 bis 15 Sekunden.
+
+**Theming.** Alle Farben sind CSS-Custom-Properties ohne Spezifität (`--spa-accent`, `--spa-surface` und weitere, aufgelistet oben in `assets/ai-actions.css`). Ein Theme kann sie mit einer einfachen Regel überschreiben, auch für einen Dunkelmodus.
 
 ---
 
 ## Tests
 
 ```bash
-./tests/run-all.sh
+php tests/unit.php                                # 127 Prüfungen, ohne osTicket, ohne Netz
+./dev/up.sh                                       # osTicket-1.18.4-Teststack auf 127.0.0.1:8089
+cd tests/e2e && npm ci && npx playwright test     # 35 End-to-End-Tests
 ```
 
-Benennen, was womit geprüft wird. Und was *nicht* geprüft wird.
+Der Stack läuft mit einem Offline-Ersatz für das Modell (`SPA_AI_FAKE=1`), die Suite braucht also weder Key noch Geld. Sie deckt jedes Abnahmekriterium der Spec ab und dazu eine Angriffs-Suite (CSRF auf jedem Endpoint, Race Conditions, manipulierte Parameter, fremde Tickets und Gespräche). Live-Läufe gegen das echte Modell beschreibt `dev/README.md`.
+
+Nicht geprüft: PHP 8.1, 8.2 und 8.4 zur Laufzeit (nur Lint), osTicket mit erzwungener 2FA, Verläufe über 50.000 Zeichen mit dem echten Modell.
 
 ---
 
 ## Bekannte Grenzen
 
-- Konkret werden. Eine Grenze, die im Betrieb auffällt, wird ein Bug-Report; eine, die hier steht, war eine Entscheidung.
+- **Nur das offene Ticket.** Keine Anfragen über mehrere Tickets („schließe alle Tickets von Kunde X“), keine Suche.
+- **Entwürfe werden nie gesendet**, und ein vorhandener Entwurf des Agenten bleibt stehen.
+- **Kein Rückgängig für Notizen, Entwürfe und Unter-Tickets.** Rückgängig gilt 30 Sekunden lang für Feldänderungen.
+- **Anhänge werden nicht gelesen.**
+- **Schließen nach einer Zuweisung im selben Plan behält die neue Zuweisung.** osTicket selbst würde den schließenden Agenten zuweisen; das Plugin folgt der Anfrage des Agenten.
+- **Auf dem Board kann der offene Chat Karten** in der rechten Spalte verdecken, solange die Schnellansicht offen ist.
+- **Oberfläche Deutsch und Englisch.** Das Modell antwortet in der Sprache der Anfrage.
 
 ---
 
 ## Mitarbeit
 
-Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Sicherheitslücken: [SECURITY.md](SECURITY.md), niemals als öffentliches Issue.
+Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Sicherheitsprobleme: siehe [SECURITY.md](SECURITY.md), nie als öffentliches Issue.
 
 ## Lizenz
 
-[MIT](LICENSE) © studio-prisma
+[GPL-2.0-or-later](LICENSE) © studio-prisma. Das Plugin erweitert osTicket-Klassen und folgt deshalb osTickets Lizenz.
