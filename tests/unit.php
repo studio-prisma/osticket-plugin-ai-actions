@@ -869,6 +869,21 @@ $llm = new AdminOnceLlm('set_status');
 $r = AiActionsPlanner::forAdmin($llm)->turn('SYS', array(), array(array('type' => 'text', 'text' => 'q')));
 check('admin: the settings chat offers only settings tools; ticket tools are refused', $r['rejected'] === 1 && !$r['changes']
     && $llm->tools === AiActionsAdminTools::NAMES);
+check('admin: filter rules parsed line by line, unknown fields and hows refused',
+    AiActionsAdminTools::rules("email contains @x.example\nsubject starts Invoice  ") === array(
+        array('w' => 'email', 'h' => 'contains', 'v' => '@x.example'), array('w' => 'subject', 'h' => 'starts', 'v' => 'Invoice'))
+    && AiActionsAdminTools::rules('password equal x') === null && AiActionsAdminTools::rules('email match .*') === null
+    && AiActionsAdminTools::rules('') === null);
+check('admin: filter actions only of the known kinds, IDs that exist, each kind once',
+    AiActionsAdminTools::actions("dept 1\npri 2", $exists) === array('dept' => 1, 'pri' => 2)
+    && AiActionsAdminTools::actions('reject 1', $exists) === null && AiActionsAdminTools::actions('email 1', $exists) === null
+    && AiActionsAdminTools::actions("dept 1\ndept 2", $exists) === null && AiActionsAdminTools::actions('dept 99', $exists) === null);
+check('admin: departments are only changed, never created', AiActionsAdminTools::validate('save_department',
+    array('id' => '', 'name' => 'New', 'manager' => '', 'sla' => '', 'public' => ''), $exists) === null
+    && AiActionsAdminTools::validate('save_department', array('id' => '1', 'name' => 'Renamed', 'manager' => '0', 'sla' => '', 'public' => 'no'), $exists) !== null);
+check('admin: team membership needs team, agent and yes/no', AiActionsAdminTools::validate('team_member',
+    array('id' => '', 'team' => '1', 'agent' => '2', 'member' => 'yes'), $exists) !== null
+    && AiActionsAdminTools::validate('team_member', array('id' => '', 'team' => '1', 'agent' => '2', 'member' => ''), $exists) === null);
 check('admin: system prompt names the limits', strpos(AiActionsAdminTools::system('Desk', 'now'), 'You never delete') !== false
     && strpos(AiActionsAdminTools::system('Desk', 'now'), 'roles, permissions') !== false);
 

@@ -128,3 +128,61 @@ test('ticket pages keep the ticket chat; admin pages without the settings chat f
   const box = await page.locator('#spa-ai-config').textContent();
   expect(JSON.parse(box || '{}').admin).toBe(false);
 });
+
+test('ticket filter: created with rule and action, and it acts on the next ticket', async ({ page }) => {
+  sql("DELETE f, r, a FROM ost_filter f LEFT JOIN ost_filter_rule r ON r.filter_id=f.id LEFT JOIN ost_filter_action a ON a.filter_id=f.id WHERE f.name='AI supplier filter'");
+  await staffLogin(page, 'admin');
+  const chat = await adminChat(page, '/scp/filters.php');
+  const reply = await say(chat, 'create filter');
+  await expect(reply.locator('.spa-ai-plan-label')).toHaveText('Ticket filter');
+  await expect(reply.locator('.spa-ai-plan-value')).toContainText('rules: email contains @lieferant.example.com');
+  await runPlan(reply);
+  const id = sql("SELECT id FROM ost_filter WHERE name='AI supplier filter'");
+  expect(sql(`SELECT CONCAT(what,' ',how,' ',val) FROM ost_filter_rule WHERE filter_id=${id}`)).toBe('email contains @lieferant.example.com');
+  const dept = sql(`SELECT JSON_VALUE(configuration, '$.dept_id') FROM ost_filter_action WHERE filter_id=${id} AND type='dept'`);
+  expect(Number(dept)).toBeGreaterThan(0);
+
+  const ticket = php(`User::fromVars(array('name' => 'Bob Supplier', 'email' => 'bob@lieferant.example.com'));`
+    + ` $e = array(); $t = Ticket::create(array('email' => 'bob@lieferant.example.com', 'name' => 'Bob', 'subject' => 'Delivery', 'message' => 'Hi',`
+    + ` 'ip' => '127.0.0.1', 'source' => 'API'), $e, 'api', false, false); echo $t ? $t->getId() : json_encode($e);`);
+  expect(sql(`SELECT dept_id FROM ost_ticket WHERE ticket_id=${ticket}`)).toBe(dept);
+});
+
+test('department rename: name only; members and access stay (members[] trap)', async ({ page }) => {
+  const id = sql("SELECT MIN(id) FROM ost_department");
+  sql(`UPDATE ost_department SET name='Support' WHERE id=${id} AND name='Renamed Dept'`);
+  const name = sql(`SELECT name FROM ost_department WHERE id=${id}`);
+  const before = row('ost_department', 'id', id, ['name', 'updated', 'path']);
+  const members = sql(`SELECT CONCAT((SELECT COUNT(*) FROM ost_staff WHERE dept_id=${id}), '/', (SELECT COUNT(*) FROM ost_staff_dept_access WHERE dept_id=${id}))`);
+  await staffLogin(page, 'admin');
+  const chat = await adminChat(page, '/scp/departments.php');
+  const reply = await say(chat, 'rename department');
+  await expect(reply.locator('.spa-ai-plan-value')).toContainText(`name: ${name} → Renamed Dept`);
+  await runPlan(reply);
+  expect(sql(`SELECT name FROM ost_department WHERE id=${id}`)).toBe('Renamed Dept');
+  expect(row('ost_department', 'id', id, ['name', 'updated', 'path'])).toBe(before);
+  expect(sql(`SELECT CONCAT((SELECT COUNT(*) FROM ost_staff WHERE dept_id=${id}), '/', (SELECT COUNT(*) FROM ost_staff_dept_access WHERE dept_id=${id}))`)).toBe(members);
+  sql(`UPDATE ost_department SET name='${name}' WHERE id=${id}`);
+});
+
+test('team member: added alone, the others stay; undo removes only that one', async ({ page }) => {
+  let team = sql('SELECT MIN(team_id) FROM ost_team');
+  if (team === 'NULL' || !team) {
+    team = php('$t = Team::create(array("name" => "Level 2", "flags" => Team::FLAG_ENABLED, "notes" => "")); $t->save(); echo $t->getId();');
+  }
+  const philipp = sql("SELECT staff_id FROM ost_staff WHERE firstname='Philipp' ORDER BY staff_id LIMIT 1");
+  const admin = sql("SELECT MIN(staff_id) FROM ost_staff");
+  sql(`DELETE FROM ost_team_member WHERE team_id=${team} AND staff_id=${philipp}`);
+  sql(`INSERT IGNORE INTO ost_team_member (team_id, staff_id, flags) VALUES (${team}, ${admin}, 0)`);
+  await staffLogin(page, 'admin');
+  const chat = await adminChat(page, '/scp/teams.php');
+  const reply = await say(chat, 'add to team');
+  await expect(reply.locator('.spa-ai-plan-label')).toHaveText('Team member');
+  const after = await runPlan(reply);
+  expect(sql(`SELECT GROUP_CONCAT(staff_id ORDER BY staff_id) FROM ost_team_member WHERE team_id=${team}`))
+    .toBe([admin, philipp].map(Number).sort((a, b) => a - b).join(','));
+
+  await Promise.all([page.waitForEvent('load', { timeout: 15000 }), after.locator('.spa-ai-plan-done .spa-ai-undo').last().click()]);
+  await expect(page.locator('#spa-ai .spa-ai-plan-undone')).toBeVisible({ timeout: 15000 });
+  expect(sql(`SELECT GROUP_CONCAT(staff_id) FROM ost_team_member WHERE team_id=${team}`)).toBe(String(admin));
+});
