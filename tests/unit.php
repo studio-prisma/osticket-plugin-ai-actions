@@ -283,6 +283,75 @@ check('settings: model, effort, key file', $s['model'] === 'claude-sonnet-5-5' &
 $s = AiActionsController::normalise(array('model' => 'gpt-5', 'effort' => 'max'));
 check('settings: unknown model and effort fall back', $s['model'] === 'claude-opus-5-5' && $s['effort'] === 'low');
 
+// ------------------------------------------------------------- conversation
+
+$llm = new ScriptedLlm(array(
+    array('stop' => 'end_turn', 'content' => array(
+        array('type' => 'thinking', 'thinking' => '', 'signature' => 's1'),
+        array('type' => 'text', 'text' => 'first answer'))),
+    array('stop' => 'tool_use', 'content' => array(toolUse('set_due_date', array('due' => '2026-11-09 17:00'), 'tu_9'))),
+    array('stop' => 'end_turn', 'content' => array(array('type' => 'text', 'text' => 'planned'))),
+));
+$p = new AiActionsPlanner($llm);
+$r1 = $p->turn('sys', array(), AiActionsPlanner::firstMessage(array('data' => '<ticket_data/>'), 'what is this?'));
+check('turn: final assistant message kept, thinking block unchanged',
+    count($r1['messages']) === 2 && $r1['messages'][1]['role'] === 'assistant'
+    && $r1['messages'][1]['content'][0] === array('type' => 'thinking', 'thinking' => '', 'signature' => 's1'));
+$r2 = $p->turn('sys', $r1['messages'], AiActionsPlanner::nextMessage('<ticket_data/>',
+    array(array('state' => 'done', 'results' => array(array('label' => 'Due date', 'value' => 'x', 'ok' => true)))), 'a week later'));
+check('turn: history only appended, earlier messages byte-identical',
+    array_slice($r2['messages'], 0, 2) === $r1['messages']);
+check('turn: second request sent the whole history',
+    count($llm->sent[1]) === 3 && $llm->sent[1][2]['content'][1]['text'] === "<plan_result>\nThe agent confirmed the previous plan. Result:\n- Due date: x (done)\n</plan_result>");
+check('turn: roles alternate', implode(',', array_column($r2['messages'], 'role')) === 'user,assistant,user,assistant,user,assistant');
+
+$loop = array();
+for ($i = 0; $i < 10; $i++) {
+    $loop[] = array('stop' => 'tool_use', 'content' => array(toolUse('set_due_date', array('due' => '2026-11-02 17:00'), "tl_$i")));
+}
+$r = (new AiActionsPlanner(new ScriptedLlm($loop)))->turn('sys', array(), array(array('type' => 'text', 'text' => 'x')));
+$lastMsg = end($r['messages']);
+check('turn: cut short at the round limit, every tool call still answered',
+    $lastMsg['role'] === 'user' && $lastMsg['content'][0]['type'] === 'tool_result');
+$merged = AiActionsPlanner::appendUser($r['messages'], array(array('type' => 'text', 'text' => 'next')));
+check('turn: next message joins the trailing tool results', count($merged) === count($r['messages'])
+    && end($merged)['content'][1]['text'] === 'next');
+
+$r = (new AiActionsPlanner(new ScriptedLlm(array(array('stop' => 'max_tokens', 'content' => array(
+    toolUse('set_due_date', array('due' => '2026-11-02 17:00'), 'tm_1')))))))->turn('sys', array(), array(array('type' => 'text', 'text' => 'x')));
+check('turn: tool call cut by max_tokens still gets a result', end($r['messages'])['content'][0]['tool_use_id'] === 'tm_1');
+
+check('outcomes: every state explained',
+    strpos(AiActionsPlanner::outcomeText(array(array('state' => 'discarded'), array('state' => 'expired'), array('state' => 'superseded'))),
+        "discarded the previous plan. Nothing was changed.\nThe previous plan expired") !== false);
+check('outcomes: failed change carries its reason',
+    strpos(AiActionsPlanner::outcomeText(array(array('state' => 'done', 'results' => array(
+        array('label' => 'Due date', 'value' => 'y', 'ok' => false, 'error' => 'forbidden', 'message' => ''))))), 'failed:  forbidden') !== false);
+
+$fake = new AiActionsFakeLlm('2026-11-01');
+$r = (new AiActionsPlanner($fake))->turn('sys', array(array('role' => 'user', 'content' => array(array('type' => 'text', 'text' => 'old'))),
+    array('role' => 'assistant', 'content' => array(array('type' => 'text', 'text' => 'old')))),
+    AiActionsPlanner::nextMessage('<ticket_data/>', array(array('state' => 'discarded')), 'what happened to the previous plan?'));
+check('fake: reports the outcome it was given', $r['answer'] === 'Previous plan: discarded.');
+
+$transcript = array(
+    array('role' => 'user', 'text' => 'due tomorrow'),
+    array('role' => 'ai', 'text' => 'ok', 'plan' => array('id' => str_repeat('a', 32), 'changes' => array(), 'state' => 'open')),
+    array('role' => 'ai', 'text' => 'ok', 'plan' => array('id' => str_repeat('b', 32), 'changes' => array(), 'state' => 'open')),
+);
+$marked = AiActionsChatStore::markPlan($transcript, str_repeat('a', 32), 'done', array(array('ok' => true)));
+check('chat: outcome marks only its own plan', $marked[1]['plan']['state'] === 'done' && $marked[2]['plan']['state'] === 'open');
+$client = AiActionsChatStore::forClient($marked);
+check('chat: browser gets plan IDs only while a plan can run',
+    !isset($client[1]['plan']['id']) && $client[2]['plan']['id'] === str_repeat('b', 32));
+
+$block = AiActionsContext::render(array('Status' => 'Open'), array(), true);
+check('context: later turn without news says so', strpos($block, 'Ticket facts now:') !== false && strpos($block, 'No new thread entries') !== false);
+
+check('assets: board page gets the bubble', AiActionsAssets::isPage('/scp/ajax.php', 'GET', array(), false, '/board'));
+check('assets: other ajax routes do not', !AiActionsAssets::isPage('/scp/ajax.php', 'GET', array(), false, '/board/state')
+    && !AiActionsAssets::isPage('/scp/ajax.php', 'GET', array(), false, '/tickets/2/preview'));
+
 // ------------------------------------------------------------------- store
 
 check('store: id format', AiActionsRunStore::isId(str_repeat('a1', 16)) && !AiActionsRunStore::isId("' OR 1=1 --")

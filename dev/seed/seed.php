@@ -194,6 +194,32 @@ foreach (array('enabled' => '1', 'roles' => json_encode($roles), 'key_file' => '
         CONFIG_TABLE, $ns, $k, db_input($v)));
 }
 
+// The plugin creates its tables on first use; the specs clean them up
+// before that, so they exist from the start here.
+AiActionsRunStore::ensure();
+AiActionsChatStore::ensure();
+
+// The Ticket Board plugin, if dev/local/compose.override.yml mounts it
+// (the chat has to work in its quick view). Not the start page, so the
+// specs land where they expect.
+$board = false;
+if (is_file(INCLUDE_DIR . 'plugins/board/plugin.php')) {
+    $bp = $ost->plugins->install('board');
+    if (!$bp) {
+        fail('board plugin install');
+    }
+    $bpid = (int) $bp->getId();
+    q(sprintf("UPDATE %s SET isactive=1 WHERE id=%d", PLUGIN_TABLE, $bpid));
+    q(sprintf("INSERT INTO %s (plugin_id, flags, name, notes, created, updated) VALUES (%d, 1, 'default', '', NOW(), NOW())",
+        PLUGIN_INSTANCE_TABLE, $bpid));
+    $bns = sprintf('plugin.%d.instance.%d', $bpid, (int) db_insert_id());
+    foreach (array('enable_staff' => '1', 'staff_landing' => '0', 'next_after_close' => '0') as $k => $v) {
+        q(sprintf("INSERT INTO %s (namespace, `key`, value, updated) VALUES ('%s', '%s', '%s', NOW())",
+            CONFIG_TABLE, $bns, $k, $v));
+    }
+    $board = true;
+}
+
 // Optional local additions, mounted by dev/local/compose.override.yml.
 // Must not write to stdout.
 if (is_file('/seed-local/seed.php')) {
@@ -206,4 +232,5 @@ echo json_encode(array(
     'status'  => array('open' => $open, 'closed' => $closed),
     'agents'  => $agents,
     'plugin'  => array('id' => $pid, 'instance' => $iid),
+    'board'   => $board,
 ), JSON_PRETTY_PRINT) . "\n";

@@ -31,6 +31,7 @@ require_once __DIR__ . '/src/AiActionsClaude.php';
 require_once __DIR__ . '/src/AiActionsContext.php';
 require_once __DIR__ . '/src/AiActionsPlanner.php';
 require_once __DIR__ . '/src/AiActionsRunStore.php';
+require_once __DIR__ . '/src/AiActionsChatStore.php';
 require_once __DIR__ . '/src/AiActionsExecutor.php';
 require_once __DIR__ . '/src/AiActionsAssets.php';
 require_once __DIR__ . '/src/AiActionsController.php';
@@ -90,6 +91,15 @@ class AiActionsPlugin extends Plugin
         }));
         $dispatcher->append(url_post('^/ai/run$', static function () {
             return AiActionsController::run();
+        }));
+        $dispatcher->append(url_get('^/ai/chat$', static function () {
+            return AiActionsController::chat();
+        }));
+        $dispatcher->append(url_post('^/ai/discard$', static function () {
+            return AiActionsController::discard();
+        }));
+        $dispatcher->append(url_post('^/ai/reset$', static function () {
+            return AiActionsController::reset();
         }));
         $dispatcher->append(url_get('^/ai/assets/([a-z.-]+)$', static function ($name) {
             return AiActionsController::asset($name);

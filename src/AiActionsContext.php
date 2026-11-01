@@ -17,7 +17,13 @@ final class AiActionsContext
     /** Per entry, so one huge mail can't push out everything else. */
     public const ENTRY_MAX = 4000;
 
-    public static function data($ticket): string
+    /**
+     * Facts always; thread entries newer than $since only (all on the first
+     * turn of a conversation).
+     *
+     * @return array{text:string, last:int} last = highest entry ID seen
+     */
+    public static function data($ticket, int $since = 0): array
     {
         $owner = $ticket->getOwner();
         $org = $owner && $owner->getOrganization() ? (string) $owner->getOrganization()->getName() : '';
@@ -34,8 +40,10 @@ final class AiActionsContext
         );
 
         $entries = array();
-        foreach ($ticket->getThread()->getEntries()->order_by('-created') as $e) {
+        $last = $since;
+        foreach ($ticket->getThread()->getEntries()->filter(array('id__gt' => $since))->order_by('-id') as $e) {
             $body = $e->getBody();
+            $last = max($last, (int) $e->getId());
             $entries[] = array(
                 'type'    => (string) $e->getType(),
                 'poster'  => (string) $e->getPoster(),
@@ -44,22 +52,29 @@ final class AiActionsContext
             );
         }
 
-        return self::render($facts, $entries);
+        return array('text' => self::render($facts, $entries, $since > 0), 'last' => $last);
     }
 
     /**
      * @param array<string,string> $facts
      * @param array<int,array{type:string,poster:string,created:string,text:string}> $entries newest first
+     * @param bool $update later turn of a conversation: only new entries
      * Public for the unit tests.
      */
-    public static function render(array $facts, array $entries): string
+    public static function render(array $facts, array $entries, bool $update = false): string
     {
-        $lines = array('Ticket facts:');
+        $lines = array($update ? 'Ticket facts now:' : 'Ticket facts:');
         foreach ($facts as $k => $v) {
             $lines[] = "- $k: " . self::clean($v, 300);
         }
         $lines[] = '';
-        $lines[] = 'Thread, newest first (times are server time):';
+        if ($update && !$entries) {
+            $lines[] = 'No new thread entries since the last message.';
+        } else {
+            $lines[] = $update
+                ? 'New thread entries since the last message, newest first (times are server time):'
+                : 'Thread, newest first (times are server time):';
+        }
 
         $used = 0;
         $skipped = 0;

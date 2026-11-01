@@ -49,10 +49,14 @@ final class AiActionsAssets
      * Whether this request is a full agent-panel page that gets the tags.
      * Public for the unit tests.
      */
-    public static function isPage(string $script, string $method, array $get, bool $pjax): bool
+    public static function isPage(string $script, string $method, array $get, bool $pjax, string $pathInfo = ''): bool
     {
         if ($method !== 'GET' || $pjax || !preg_match('#/scp/([a-z]+\.php)$#', $script, $m)) {
             return false;
+        }
+        // The Ticket Board plugin's page (studio-prisma/osticket-plugin-board).
+        if ($m[1] === 'ajax.php') {
+            return (bool) preg_match('#^/board/?$#', $pathInfo);
         }
         if (!in_array($m[1], self::PAGES, true)) {
             return false;
@@ -68,7 +72,7 @@ final class AiActionsAssets
             return;
         }
         if (!self::isPage((string) ($_SERVER['SCRIPT_NAME'] ?? ''), (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'),
-                $_GET, isset($_SERVER['HTTP_X_PJAX']))) {
+                $_GET, isset($_SERVER['HTTP_X_PJAX']), (string) ($_SERVER['PATH_INFO'] ?? ''))) {
             return;
         }
         ob_start(array(__CLASS__, 'inject'));

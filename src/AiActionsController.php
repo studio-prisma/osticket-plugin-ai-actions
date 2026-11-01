@@ -90,6 +90,24 @@ final class AiActionsController
 
     // ------------------------------------------------------------------
 
+    /** GET /ai/chat?ticket_id=N: the conversation as the chat window shows it. */
+    public static function chat(): string
+    {
+        global $thisstaff;
+
+        header('Cache-Control: no-store');
+        if (!self::allowed($thisstaff)) {
+            return self::json(404, array('error' => 'not_found'));
+        }
+        $ticket = self::visibleTicket($thisstaff, $_GET['ticket_id'] ?? 0);
+        if (!$ticket) {
+            return self::json(404, array('error' => 'not_found'));
+        }
+        $chat = AiActionsChatStore::load((int) $thisstaff->getId(), (int) $ticket->getId());
+        return self::json(200, self::chatPayload($ticket, $chat));
+    }
+
+    /** POST /ai/plan: the agent's next message in the conversation. */
     public static function plan(): string
     {
         global $thisstaff;
@@ -99,14 +117,34 @@ final class AiActionsController
         if ($prompt === null) {
             return self::json(422, array('error' => 'invalid_prompt'));
         }
+        $staffId = (int) $thisstaff->getId();
+        $ticketId = (int) $ticket->getId();
+        $chat = AiActionsChatStore::load($staffId, $ticketId);
+        if ($chat['turns'] >= AiActionsChatStore::MAX_TURNS) {
+            return self::json(422, array('error' => 'conversation_full'));
+        }
         $llm = self::llm();
         if (!$llm) {
             return self::json(422, array('error' => 'not_configured'));
         }
 
+        // A new message replaces a plan the agent left open.
+        foreach ($chat['transcript'] as $item) {
+            $open = $item['plan'] ?? null;
+            if ($open && ($open['state'] ?? '') === 'open') {
+                $state = AiActionsRunStore::cancel((string) $open['id'], $staffId, 'superseded') ? 'superseded' : 'expired';
+                $chat['transcript'] = AiActionsChatStore::markPlan($chat['transcript'], (string) $open['id'], $state, array());
+                $chat['pending'][] = array('state' => $state, 'results' => array());
+            }
+        }
+
         $t = AiActionsI18n::strings(self::language($thisstaff));
+        $context = self::context($thisstaff, $ticket, $chat['seen_entry']);
+        $blocks = $chat['messages']
+            ? AiActionsPlanner::nextMessage($context['data'], $chat['pending'], $prompt)
+            : AiActionsPlanner::firstMessage($context, $prompt);
         try {
-            $result = (new AiActionsPlanner($llm))->plan(self::context($thisstaff, $ticket), $prompt);
+            $result = (new AiActionsPlanner($llm))->turn(AiActionsPlanner::system($context), $chat['messages'], $blocks);
         } catch (AiActionsLlmError $e) {
             // Status and error type only: the detail never carries the key or the prompt.
             error_log(sprintf('ai-actions: model call failed (%s) %s', $e->kind, $e->getMessage()));
@@ -118,17 +156,21 @@ final class AiActionsController
         foreach ($result['changes'] as $c) {
             $preview[] = AiActionsTools::summary($c['action'], $c['input'], $t);
         }
-        $planId = $result['changes']
-            ? AiActionsRunStore::create((int) $thisstaff->getId(), (int) $ticket->getId(), $prompt, $result['changes'])
-            : null;
+        $planId = $result['changes'] ? AiActionsRunStore::create($staffId, $ticketId, $prompt, $result['changes']) : null;
 
-        return self::json(200, array(
-            'answer'   => $result['answer'],
-            'changes'  => $preview,
-            'plan_id'  => $planId,
-            'rejected' => $result['rejected'],
-            'usage'    => $result['usage'],
-        ));
+        $chat['transcript'][] = array('role' => 'user', 'text' => $prompt);
+        $reply = array('role' => 'ai', 'text' => $result['answer']);
+        if ($planId) {
+            $reply['plan'] = array('id' => $planId, 'changes' => $preview, 'state' => 'open');
+        }
+        $chat['transcript'][] = $reply;
+        $chat['messages'] = $result['messages'];
+        $chat['seen_entry'] = $context['last_entry'];
+        $chat['pending'] = array();
+        $chat['turns']++;
+        AiActionsChatStore::save($staffId, $ticketId, $chat);
+
+        return self::json(200, self::chatPayload($ticket, $chat) + array('usage' => $result['usage']));
     }
 
     public static function run(): string
@@ -136,8 +178,13 @@ final class AiActionsController
         global $thisstaff;
 
         self::guard(false);
-        $run = AiActionsRunStore::claim((string) ($_POST['plan_id'] ?? ''), (int) $thisstaff->getId());
+        $planId = (string) ($_POST['plan_id'] ?? '');
+        $staffId = (int) $thisstaff->getId();
+        $run = AiActionsRunStore::claim($planId, $staffId);
         if (!$run) {
+            if (($tid = AiActionsRunStore::ticketOf($planId, $staffId)) !== null) {
+                AiActionsChatStore::planOutcome($staffId, $tid, $planId, 'expired');
+            }
             return self::json(422, array('error' => 'expired'));
         }
         $ticket = self::visibleTicket($thisstaff, $run['ticket_id']);
@@ -171,8 +218,51 @@ final class AiActionsController
             'title' => $t['note_title'],
             'note'  => new TextThreadEntryBody(self::noteBody($run['prompt'], $results, $t)),
         ), $errors, $thisstaff);
+        AiActionsChatStore::planOutcome($staffId, (int) $ticket->getId(), $run['id'], 'done', $results);
 
         return self::json(200, array('results' => $results, 'note' => $note ? 'saved' : 'failed'));
+    }
+
+    /** POST /ai/discard: the agent rejects a plan. */
+    public static function discard(): string
+    {
+        global $thisstaff;
+
+        self::guard(false);
+        $planId = (string) ($_POST['plan_id'] ?? '');
+        $staffId = (int) $thisstaff->getId();
+        $tid = AiActionsRunStore::cancel($planId, $staffId, 'discarded');
+        if ($tid === null) {
+            return self::json(422, array('error' => 'expired'));
+        }
+        AiActionsChatStore::planOutcome($staffId, $tid, $planId, 'discarded');
+        return self::json(200, array('ok' => true));
+    }
+
+    /** POST /ai/reset: start the conversation about this ticket over. */
+    public static function reset(): string
+    {
+        global $thisstaff;
+
+        $ticket = self::guard();
+        $staffId = (int) $thisstaff->getId();
+        $chat = AiActionsChatStore::load($staffId, (int) $ticket->getId());
+        foreach ($chat['transcript'] as $item) {
+            if (($item['plan']['state'] ?? '') === 'open') {
+                AiActionsRunStore::cancel((string) $item['plan']['id'], $staffId, 'discarded');
+            }
+        }
+        AiActionsChatStore::reset($staffId, (int) $ticket->getId());
+        return self::json(200, self::chatPayload($ticket, AiActionsChatStore::load($staffId, (int) $ticket->getId())));
+    }
+
+    private static function chatPayload($ticket, array $chat): array
+    {
+        return array(
+            'ticket'     => array('id' => (int) $ticket->getId(), 'number' => (string) $ticket->getNumber()),
+            'transcript' => AiActionsChatStore::forClient($chat['transcript']),
+            'turns_left' => max(0, AiActionsChatStore::MAX_TURNS - (int) $chat['turns']),
+        );
     }
 
     public static function asset(string $name): string
@@ -245,15 +335,17 @@ final class AiActionsController
         return new AiActionsClaude($key['key'], self::$settings['model'], self::$settings['effort']);
     }
 
-    private static function context($staff, $ticket): array
+    private static function context($staff, $ticket, int $seenEntry = 0): array
     {
         $tz = self::timezone($staff);
         $now = self::now($tz);
+        $data = AiActionsContext::data($ticket, $seenEntry);
         return array(
-            'now'      => $now->format('Y-m-d H:i'),
-            'weekday'  => $now->format('l'),
-            'timezone' => $tz,
-            'data'     => AiActionsContext::data($ticket),
+            'now'        => $now->format('Y-m-d H:i'),
+            'weekday'    => $now->format('l'),
+            'timezone'   => $tz,
+            'data'       => $data['text'],
+            'last_entry' => $data['last'],
         );
     }
 

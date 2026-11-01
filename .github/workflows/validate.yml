@@ -73,6 +73,19 @@ jobs:
           cache: npm
           cache-dependency-path: tests/e2e/package-lock.json
 
+      # The chat has to work in the board's quick view (spec 2-board).
+      - name: Check out the Ticket Board plugin
+        uses: actions/checkout@v7
+        with:
+          repository: studio-prisma/osticket-plugin-board
+          path: dev/local/plugins/board
+
+      - name: Mount it in the test stack
+        run: |
+          printf '%s\n' 'services:' '  osticket:' '    volumes:' \
+            '      - ./local/plugins/board:/var/www/html/include/plugins/board:ro' \
+            > dev/local/compose.override.yml
+
       - name: Start test stack
         run: ./dev/up.sh
 

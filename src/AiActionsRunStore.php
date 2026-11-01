@@ -58,8 +58,8 @@ final class AiActionsRunStore
         db_query(sprintf(
             "INSERT INTO `%s` (id, staff_id, ticket_id, state, prompt, plan, created, expires)
              VALUES ('%s', %d, %d, 'planned', %s, %s, NOW(), NOW() + INTERVAL %d SECOND)",
-            self::table(), $id, $staffId, $ticketId, db_input($prompt),
-            db_input((string) json_encode($changes, JSON_UNESCAPED_UNICODE)), self::TTL));
+            self::table(), $id, $staffId, $ticketId, self::ascii($prompt),
+            self::ascii($changes), self::TTL));
         return $id;
     }
 
@@ -91,14 +91,52 @@ final class AiActionsRunStore
         return array(
             'id'        => $id,
             'ticket_id' => (int) $row['ticket_id'],
-            'prompt'    => (string) $row['prompt'],
+            'prompt'    => (string) json_decode((string) $row['prompt'], true),
             'changes'   => is_array($changes) ? $changes : array(),
         );
+    }
+
+    /**
+     * Withdraws a plan that hasn't run (discarded, or replaced by a newer
+     * message). Returns the ticket ID if this agent's plan was withdrawn.
+     */
+    public static function cancel(string $id, int $staffId, string $state = 'discarded'): ?int
+    {
+        if (!self::isId($id) || !preg_match('/^[a-z]{1,16}$/', $state)) {
+            return null;
+        }
+        self::ensure();
+        db_query(sprintf("UPDATE `%s` SET state='%s' WHERE id='%s' AND staff_id=%d AND state='planned'",
+            self::table(), $state, $id, $staffId));
+        return db_affected_rows() === 1 ? self::ticketOf($id, $staffId) : null;
+    }
+
+    /** Ticket of this agent's plan, whatever its state; null for unknown or foreign plans. */
+    public static function ticketOf(string $id, int $staffId): ?int
+    {
+        if (!self::isId($id)) {
+            return null;
+        }
+        self::ensure();
+        $res = db_query(sprintf("SELECT ticket_id FROM `%s` WHERE id='%s' AND staff_id=%d", self::table(), $id, $staffId));
+        $row = $res ? db_fetch_row($res) : null;
+        return $row ? (int) $row[0] : null;
     }
 
     public static function finish(string $id, array $results): void
     {
         db_query(sprintf("UPDATE `%s` SET state='done', result=%s WHERE id='%s'",
-            self::table(), db_input((string) json_encode($results, JSON_UNESCAPED_UNICODE)), $id));
+            self::table(), self::ascii($results), $id));
+    }
+
+    /**
+     * Quoted ASCII-only JSON (\uXXXX). osTicket's connection charset may be
+     * 3-byte utf8, which turns emoji into "????".
+     *
+     * @param mixed $v
+     */
+    private static function ascii($v): string
+    {
+        return "'" . db_real_escape((string) json_encode($v)) . "'";
     }
 }

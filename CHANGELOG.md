@@ -9,7 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- AI field in the agent ticket view: a request is turned into planned changes, shown as a preview and run only after the agent confirms.
+- Chat bubble in the bottom-right corner of the agent panel. The conversation belongs to the open ticket: the ticket view or a card in the Ticket Board's quick view. The window moves aside while the board's drawer is open.
+- Conversations per agent and ticket, kept on the server only (12 hours idle, 20 messages, "New" starts over). The browser sends only the next message.
+- The model learns in its next turn whether a plan ran, was discarded, expired or was replaced by a new message, and sees new thread entries.
+- A plan is turned into a preview card in the chat and runs only after the agent confirms.
 - Due date as the first action, through the same core path and permission check as osTicket's own field dialog.
 - Plans are stored server-side, bound to agent and ticket, valid for 10 minutes and runnable once. The browser only sends the plan ID.
 - Internal note "AI action" on every run with the request and the result of each change.

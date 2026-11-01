@@ -56,4 +56,6 @@ services:
       - ./local/seed:/seed-local:ro                           # optional seed hook
 ```
 
+A Ticket Board plugin mounted at `include/plugins/board` is installed and enabled by the seed (not as start page), and `tests/e2e/2-board.spec.js` runs against it; without it that spec is skipped. CI checks out `studio-prisma/osticket-plugin-board` into `dev/local/plugins/board` for this.
+
 If `dev/local/seed/seed.php` exists, the main seed runs it at the end, with `q()`, `scalar()`, `fail()` and `$ost` in scope. It must not write to stdout.

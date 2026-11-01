@@ -39,19 +39,36 @@ final class AiActionsFakeLlm implements AiActionsLlm
         $last = end($messages);
         $usage = array('input' => 0, 'output' => 0);
 
+        $prompt = '';
+        $outcome = '';
+        $toolResult = false;
+        foreach ((array) ($last['content'] ?? array()) as $block) {
+            $type = $block['type'] ?? '';
+            $text = (string) ($block['text'] ?? '');
+            if ($type === 'text' && strpos($text, '<agent_request>') === 0) {
+                $prompt = $text;
+            } elseif ($type === 'text' && strpos($text, '<plan_result>') === 0) {
+                $outcome = $text;
+            } elseif ($type === 'tool_result') {
+                $toolResult = true;
+            }
+        }
+
         // Second round: the planner answered the tool call.
-        if (is_array($last['content'] ?? null) && ($last['content'][0]['type'] ?? '') === 'tool_result') {
+        if ($prompt === '' && $toolResult) {
             return array('stop' => 'end_turn', 'content' => array(
                 array('type' => 'text', 'text' => 'Planned the due date for tomorrow, 17:00.'),
             ), 'usage' => $usage);
         }
 
-        $prompt = '';
-        foreach ((array) ($last['content'] ?? array()) as $block) {
-            if (($block['type'] ?? '') === 'text' && strpos((string) $block['text'], '<agent_request>') === 0) {
-                $prompt = (string) $block['text'];
-            }
+        // Lets the tests see that the outcome of the last plan arrived.
+        if ($outcome !== '' && preg_match('/\b(previous|vorher)/iu', $prompt)) {
+            preg_match('/The agent (confirmed|discarded|wrote a new message)/', $outcome, $m);
+            return array('stop' => 'end_turn', 'content' => array(
+                array('type' => 'text', 'text' => 'Previous plan: ' . ($m[1] ?? 'unknown') . '.'),
+            ), 'usage' => $usage);
         }
+
         if (preg_match('/\b(due|fällig)/iu', $prompt)) {
             $tomorrow = (new DateTime($this->today))->modify('+1 day')->format('Y-m-d');
             return array('stop' => 'tool_use', 'content' => array(
