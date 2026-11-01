@@ -20,6 +20,7 @@ declare(strict_types=1);
  */
 
 require_once INCLUDE_DIR . 'class.plugin.php';
+require_once INCLUDE_DIR . 'class.app.php';
 require_once INCLUDE_DIR . 'class.dispatcher.php';
 
 require_once __DIR__ . '/config.php';
@@ -52,7 +53,7 @@ require_once __DIR__ . '/src/AiActionsAutomation.php';
 class AiActionsPlugin extends Plugin
 {
     /** Mirrors plugin.php; used for cache-busting the asset URLs only. */
-    public const VERSION = '0.5.0';
+    public const VERSION = '0.5.1';
 
     /** Route base, relative to ROOT_PATH. */
     public const STAFF_BASE = 'scp/ajax.php/ai';
@@ -110,6 +111,14 @@ class AiActionsPlugin extends Plugin
             return;
         }
         Signal::connect('ajax.scp', array(__CLASS__, 'staffRoutes'));
+        // Agent panel → Applications → "AI Actions". bootstrap() runs before the
+        // agent is known, so every agent sees the entry; the page itself is for
+        // admins and tells everyone else so. registerStaffApp() isn't static in 1.18.
+        (new Application())->registerStaffApp('AI Actions', ROOT_PATH . self::STAFF_BASE . '/admin', array(
+            'iconclass' => 'Ticket',
+            'title'     => 'AI Actions: AI agents, rules, log',
+            'class'     => 'no-pjax',
+        ));
         // AI agents: no session for them, ever; their work runs in osTicket's cron.
         Signal::connect('auth.login.succeeded', static function ($staff) {
             AiActionsAgents::refuseLogin($staff);

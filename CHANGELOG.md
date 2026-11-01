@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-01
+
+### Added
+
+- "AI Actions" under Applications in the agent panel, linking to the page with AI agents, rules, log and status. Non-admins see a short note instead of the forms.
+
 ## [0.5.0] - 2026-11-01
 
 ### Added
@@ -98,7 +104,8 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.2.0...v0.3.0

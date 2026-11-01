@@ -23,13 +23,21 @@ async function createAgent(page, name) {
 
 test('admin page: admins only, other agents get 404', async ({ page, browser }) => {
   await staffLogin(page, 'admin');
-  await page.goto('/scp/ajax.php/ai/admin');
+  // Reachable from Applications in the agent panel.
+  await page.goto('/scp/index.php');
+  // The entry sits in the Applications submenu (shown on hover).
+  const entry = page.locator('#nav a[href$="/scp/ajax.php/ai/admin"], #sub_nav a[href$="/scp/ajax.php/ai/admin"], a[href$="/scp/ajax.php/ai/admin"]').first();
+  await expect(entry).toHaveCount(1);
+  await page.goto(await entry.getAttribute('href'));
   await expect(page.locator('h2').first()).toHaveText('AI agents');
 
   const other = await browser.newPage();
   await staffLogin(other, 'philipp');
+  // Reachable from Applications, but only a note for non-admins: no agents, no forms.
   const res = await other.goto('/scp/ajax.php/ai/admin');
-  expect(res.status()).toBe(404);
+  expect(res.status()).toBe(200);
+  await expect(other.locator('body')).toContainText('managed by administrators');
+  await expect(other.locator('input[name="name"]')).toHaveCount(0);
   // With a valid token, so it reaches the plugin's own admin check.
   await other.goto('/scp/index.php');
   const token = await other.locator('meta[name="csrf_token"]').getAttribute('content');

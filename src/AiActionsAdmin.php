@@ -15,7 +15,9 @@ final class AiActionsAdmin
     {
         global $thisstaff, $nav, $ost;
 
-        if (!self::admin($thisstaff)) {
+        // Agents reach this page from Applications; only admins manage it.
+        $agent = $thisstaff instanceof Staff && $thisstaff->isValid() && AiActionsController::settings()['enabled'];
+        if (!$agent) {
             Http::response(404, 'Not found');
             exit;
         }
@@ -23,6 +25,10 @@ final class AiActionsAdmin
             $nav = new StaffNav($thisstaff);
         }
         $nav->setActiveTab('apps');
+        if (!self::admin($thisstaff)) {
+            return self::render('AI Actions', '<p>AI agents, rules and the log of automatic work are managed by administrators. '
+                . 'Ask an admin if an AI agent should take over tickets of yours.</p>');
+        }
         $tab = in_array($_GET['tab'] ?? '', self::TABS, true) ? $_GET['tab'] : 'agents';
         $notice = is_string($_GET['done'] ?? null) && preg_match('/^[a-z_]{1,30}$/', $_GET['done']) ? $_GET['done'] : '';
 
