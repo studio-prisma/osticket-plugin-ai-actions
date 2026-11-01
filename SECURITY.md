@@ -32,7 +32,7 @@ Expected response: an acknowledgement within 7 days, an assessment within 30. Th
 - **Running a plan twice**, after 10 minutes, or undoing after 30 seconds.
 - **Prompt injection that gets past the preview.** Ticket content that makes the plugin change the ticket without a confirmed preview, reach another ticket, send anything, or put a planned change on screen in a way that hides what it does.
 - **Ticket content leaking to the wrong place**: another ticket's data in the model's context, an internal note in a reply draft without the agent's request, conversation history in another agent's chat.
-- **The API key** in a response, a log line, the database, a prompt, an error message, or the release package; a key file inside the osTicket directory being accepted; content of a file that isn't a key being sent anywhere.
+- **The API key** in a response, a log line, a prompt, an error message, the release package, or in clear text in the database; a key file inside the osTicket directory being accepted; content of a file that isn't a key being sent anywhere.
 - **Model or plugin output rendered as markup** in the chat, the preview, notes or drafts.
 - **Path traversal or arbitrary file reads** through the asset route or the key file setting.
 - **Getting past the daily limits** or the one-message-at-a-time lock.
@@ -46,6 +46,7 @@ Documented design decisions are not findings.
 - **Prompt injection that only changes the model's answer text** (a misleading summary) without a change, a leak or a hidden preview.
 - **Closing after an assignment in the same plan keeps the new assignee**, unlike osTicket's own close.
 - **Undo of the due date writes the old value directly**, bypassing the edit form's "must be in the future" check.
+- **A key stored in the settings can be decrypted by someone who has both the database and the osTicket files** (`SECRET_SALT`). That is how osTicket protects its own stored passwords; the key file avoids it and is the documented default.
 - **Plans, conversations and counters in the plugin's tables** for 2 days, 12 hours and 90 days.
 - **The offline test model** (`SPA_AI_FAKE=1`) when someone sets that variable on a production server.
 - **Bugs in osTicket itself**, including its permission model. Report those [upstream](https://github.com/osTicket/osTicket/security).
@@ -55,7 +56,7 @@ Documented design decisions are not findings.
 
 ## Handling of Secrets
 
-The plugin reads the API key from a file outside the osTicket directory or from the `ANTHROPIC_API_KEY` environment variable. It never stores the key in osTicket's database, never logs it and never puts it into a prompt; it only appears in the `x-api-key` header of requests to `api.anthropic.com`. The release build refuses to package anything that looks like an Anthropic key.
+The plugin reads the API key from the one source the admin chose: a file outside the osTicket directory, the `ANTHROPIC_API_KEY` environment variable, or the plugin settings. In the settings it goes through osTicket's `PasswordField`, which encrypts it with `SECRET_SALT` from `include/ost-config.php` before it reaches the database, and never shows it again. The plugin never logs the key and never puts it into a prompt; it only appears in the `x-api-key` header of requests to `api.anthropic.com`. The release build refuses to package anything that looks like an Anthropic key.
 
 The test stack generates its passwords at runtime into `dev/local/` (git-ignored). A secret that reaches a commit anyway is rotated first and removed second.
 

@@ -23,7 +23,7 @@ First release.
 - Access by primary role; off by default.
 - Offline stand-in for the model (`SPA_AI_FAKE=1`) for the local test stack and CI.
 - Claude API over plain HTTPS (API version 2026-10-21), no SDK and no third-party packages. Server-side fallback on refusals, one retry on 429/5xx.
-- API key from a file outside the osTicket directory or from `ANTHROPIC_API_KEY`; never stored in osTicket's database, never logged.
+- API key from one source the admin chooses: a file outside the osTicket directory (default), `ANTHROPIC_API_KEY`, or stored in the plugin settings, encrypted by osTicket with `SECRET_SALT` and never shown again. Never in clear text in the database, never logged.
 - The model reads the ticket's facts and thread (newest first, bounded) as a block marked untrusted; only the agent's request counts as instruction.
 - Settings for model (Opus 5.5 / Sonnet 5.5) and effort.
 - Status, priority, assignment to an agent or team, and transfer, each through the core dialog's path and permission check. The model picks values only from the lists osTicket shows this agent; they are checked again when the plan runs.

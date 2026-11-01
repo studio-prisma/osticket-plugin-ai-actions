@@ -208,13 +208,13 @@ $fakeKey = 'sk-ant-api03-' . str_repeat('A', 40);
 file_put_contents($tmp . '/key', $fakeKey . "\n");
 file_put_contents($tmp . '/webroot/include/key', $fakeKey);
 file_put_contents($tmp . '/passwd', "root:x:0:0:root:/root:/bin/bash\n");
-check('key: file outside the web root, trimmed', AiActionsKey::load($tmp . '/key', $tmp . '/webroot') === array('key' => $fakeKey, 'problem' => null));
-check('key: file inside the web root refused', AiActionsKey::load($tmp . '/webroot/include/key', $tmp . '/webroot')['problem'] === 'file_in_webroot');
-check('key: traversal into the web root refused', AiActionsKey::load($tmp . '/webroot/../webroot/include/key', $tmp . '/webroot')['problem'] === 'file_in_webroot');
-check('key: other file content never used', AiActionsKey::load($tmp . '/passwd', $tmp . '/webroot') === array('key' => null, 'problem' => 'bad_format'));
-check('key: missing file', AiActionsKey::load($tmp . '/nope', $tmp . '/webroot')['problem'] === 'file_unreadable');
+check('key: file outside the web root, trimmed', AiActionsKey::load('file', $tmp . '/key', $tmp . '/webroot') === array('key' => $fakeKey, 'problem' => null));
+check('key: file inside the web root refused', AiActionsKey::load('file', $tmp . '/webroot/include/key', $tmp . '/webroot')['problem'] === 'file_in_webroot');
+check('key: traversal into the web root refused', AiActionsKey::load('file', $tmp . '/webroot/../webroot/include/key', $tmp . '/webroot')['problem'] === 'file_in_webroot');
+check('key: other file content never used', AiActionsKey::load('file', $tmp . '/passwd', $tmp . '/webroot') === array('key' => null, 'problem' => 'bad_format'));
+check('key: missing file', AiActionsKey::load('file', $tmp . '/nope', $tmp . '/webroot')['problem'] === 'file_unreadable');
 file_put_contents($tmp . '/bom', "\xEF\xBB\xBF" . $fakeKey . "\r\n");
-check('key: BOM and CRLF from a panel file manager are ignored', AiActionsKey::load($tmp . '/bom', $tmp . '/webroot')['key'] === $fakeKey);
+check('key: BOM and CRLF from a panel file manager are ignored', AiActionsKey::load('file', $tmp . '/bom', $tmp . '/webroot')['key'] === $fakeKey);
 unlink($tmp . '/bom');
 $plesk = '/var/www/vhosts/example.com/' . PATH_SEPARATOR . '/tmp/';
 check('key: open_basedir allows the subscription folder', AiActionsKey::allowedByOpenBasedir('/var/www/vhosts/example.com/private/anthropic.key', $plesk));
@@ -222,12 +222,34 @@ check('key: open_basedir refuses /etc and look-alike prefixes',
     !AiActionsKey::allowedByOpenBasedir('/etc/osticket-ai/anthropic.key', $plesk)
     && !AiActionsKey::allowedByOpenBasedir('/var/www/vhosts/example.com.evil/x', '/var/www/vhosts/example.com'));
 check('key: no open_basedir, no limit', AiActionsKey::allowedByOpenBasedir('/etc/x', ''));
+check('key: file source with no path', AiActionsKey::load('file', '', $tmp . '/webroot')['problem'] === 'no_key');
 $envBefore = getenv('ANTHROPIC_API_KEY');
 putenv('ANTHROPIC_API_KEY');
-check('key: nothing configured', AiActionsKey::load('', $tmp . '/webroot')['problem'] === 'no_key');
+check('key: environment source, variable unset', AiActionsKey::load('env', '', $tmp . '/webroot')['problem'] === 'no_key');
 putenv('ANTHROPIC_API_KEY=' . $fakeKey);
-check('key: environment variable when no file is set', AiActionsKey::load('', $tmp . '/webroot')['key'] === $fakeKey);
+check('key: environment source', AiActionsKey::load('env', '', $tmp . '/webroot')['key'] === $fakeKey);
+check('key: only the chosen source counts (env set, file chosen without path)',
+    AiActionsKey::load('file', '', $tmp . '/webroot')['problem'] === 'no_key');
+putenv('ANTHROPIC_API_KEY=not-a-key');
+check('key: environment source, wrong format', AiActionsKey::load('env', '', $tmp . '/webroot')['problem'] === 'bad_format');
 $envBefore === false ? putenv('ANTHROPIC_API_KEY') : putenv('ANTHROPIC_API_KEY=' . $envBefore);
+
+$asked = 0;
+$stored = function () use (&$asked, $fakeKey) { $asked++; return " $fakeKey "; };
+check('key: stored source, decrypted value trimmed', AiActionsKey::load('stored', '', $tmp . '/webroot', $stored)['key'] === $fakeKey);
+AiActionsKey::load('file', $tmp . '/key', $tmp . '/webroot', $stored);
+AiActionsKey::load('env', '', $tmp . '/webroot', $stored);
+check('key: stored key only read when that source is chosen', $asked === 1);
+check('key: stored source, nothing stored or decryption failed',
+    AiActionsKey::load('stored', '', $tmp . '/webroot', function () { return false; })['problem'] === 'no_key'
+    && AiActionsKey::load('stored', '', $tmp . '/webroot', null)['problem'] === 'no_key');
+check('key: unknown source', AiActionsKey::load('vault', '', $tmp . '/webroot')['problem'] === 'unknown_source');
+check('key: format check for the settings form',
+    AiActionsKey::isKey($fakeKey) && !AiActionsKey::isKey('sk-ant-short') && !AiActionsKey::isKey(' ' . $fakeKey));
+$s = AiActionsController::normalise(array('key_source' => '{"stored":"Stored here, encrypted"}'));
+check('settings: key source from the stored choice', $s['key_source'] === 'stored');
+$s = AiActionsController::normalise(array('key_source' => 'vault'));
+check('settings: unknown key source falls back to file', $s['key_source'] === 'file');
 array_map('unlink', array($tmp . '/key', $tmp . '/webroot/include/key', $tmp . '/passwd'));
 rmdir($tmp . '/webroot/include');
 rmdir($tmp . '/webroot');

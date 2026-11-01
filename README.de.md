@@ -53,8 +53,8 @@ Vollständige Anleitung: **[docs/INSTALL.de.md](docs/INSTALL.de.md)** ([english]
 Kurzfassung:
 
 1. `ai-actions-<version>.zip` aus dem [letzten Release](https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/latest) laden und nach `include/plugins/` entpacken.
-2. Den API-Key in eine Datei **außerhalb** des osTicket-Verzeichnisses legen, nur für den Webserver lesbar.
-3. Admin-Bereich → Verwalten → Plugins → Neues Plugin hinzufügen → **AI Actions** → Installieren, Instanz anlegen, Key-Datei und Rollen eintragen, aktivieren.
+2. Festlegen, wo der Key liegt: in einer Datei **außerhalb** des osTicket-Verzeichnisses (empfohlen), in der Umgebung des Webservers, oder eingefügt in die Plugin-Einstellungen, wo osTicket ihn verschlüsselt speichert.
+3. Admin-Bereich → Verwalten → Plugins → Neues Plugin hinzufügen → **AI Actions** → Installieren, Instanz anlegen, Key-Quelle wählen, Rollen eintragen, aktivieren.
 
 ---
 
@@ -64,14 +64,17 @@ Kurzfassung:
 |---|---|---|
 | AI assistant in the agent panel | aus | Hauptschalter |
 | Agents with these primary roles | keine | Wer die Bubble sieht. Nichts ausgewählt heißt niemand |
-| API key file | leer | Absoluter Pfad zu einer Datei, die nur den Key enthält. Leer: `ANTHROPIC_API_KEY` aus der Umgebung. Dateien im osTicket-Verzeichnis werden abgelehnt |
+| Where the API key comes from | Key file | Key-Datei, Umgebungsvariable `ANTHROPIC_API_KEY` oder hier gespeichert. Nur die gewählte Quelle zählt |
+| API key file | leer | Für „Key file“: absoluter Pfad zu einer Datei, die nur den Key enthält. Dateien im osTicket-Verzeichnis werden abgelehnt |
+| API key | leer | Für „Stored here“: der Key, von osTicket mit `SECRET_SALT` aus `ost-config.php` verschlüsselt; wird nie wieder angezeigt, leeres Feld behält ihn |
+| Remove the stored key | aus | Löscht den gespeicherten Key beim Speichern |
 | Model | Claude Opus 5.5 | Oder Claude Sonnet 5.5 (günstiger) |
 | Effort | Low | Wie lange das Modell nachdenkt. Low reicht für die meisten Anfragen |
 | Messages | 100 | Pro Agent und Tag, 0 = kein Limit |
 | Tokens | 500.000 | Input plus Output pro Agent und Tag, 0 = kein Limit |
 | Thread length | 12.000 | Zeichen des Verlaufs, die das Modell liest, neueste zuerst (2.000 bis 50.000) |
 
-Der Key ist nie eine Einstellung: osTicket speichert Plugin-Einstellungen im Klartext in seiner Datenbank.
+Welche Quelle? Eine Key-Datei hält den Key ganz aus der Datenbank und ihren Backups heraus. In den Einstellungen gespeichert ist er verschlüsselt, aber wer Datenbank und osTicket-Dateien zusammen hat, kann ihn entschlüsseln. Die Umgebungsvariable liegt dort, wo dein Server oder Panel die PHP-Einstellungen hält. Die Installationsanleitung vergleicht die drei.
 
 Eine Nachricht kostet meist 1.000 bis 5.000 Tokens, mit Opus 5.5 bei niedrigem Effort etwa einen Cent. Eine Antwort dauert 3 bis 15 Sekunden.
 

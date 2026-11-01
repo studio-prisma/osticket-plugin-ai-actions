@@ -8,9 +8,10 @@ declare(strict_types=1);
  * Off by default. The plugin sends ticket content to an external API, so it
  * is switched on deliberately after the steps in docs/INSTALL.md.
  *
- * The API key is not a setting: osTicket stores plugin settings in plain text
- * in its database. The key is read from the environment or a file outside the
- * web root instead.
+ * The API key comes from one source the admin chooses (AiActionsKey): a file
+ * outside the web root, the web server's environment, or this form. Stored
+ * here, it goes through osTicket's PasswordField, which encrypts it with
+ * SECRET_SALT from ost-config.php; plain settings are stored in clear text.
  */
 
 require_once INCLUDE_DIR . 'class.plugin.php';
@@ -48,14 +49,41 @@ class AiActionsConfig extends PluginConfig
                 'label' => 'Claude API',
             )),
 
+            'key_source' => new ChoiceField(array(
+                'label'   => 'Where the API key comes from',
+                'default' => 'file',
+                'choices' => array(
+                    'file'   => 'Key file on the server (recommended)',
+                    'env'    => 'Environment variable ANTHROPIC_API_KEY',
+                    'stored' => 'Stored here, encrypted',
+                ),
+                'hint'    => 'Only the chosen source is used. File: never in the database or a backup of it. '
+                           . 'Environment: set by the server admin, e.g. in the PHP settings of the panel. '
+                           . 'Stored here: encrypted with osTicket\'s secret from ost-config.php; someone with '
+                           . 'both the database and the files can decrypt it.',
+            )),
+
             'key_file' => new TextboxField(array(
                 'label'         => 'API key file',
                 'default'       => '',
-                'hint'          => 'Absolute path to a file that contains only the API key, outside the '
-                                 . 'osTicket directory and readable by the web server. Empty: the '
-                                 . 'ANTHROPIC_API_KEY environment variable is used. The key itself is '
-                                 . 'never stored here.',
+                'hint'          => 'For "Key file": absolute path to a file that contains only the API key, '
+                                 . 'outside the osTicket directory and readable by the web server. On Plesk: '
+                                 . '/var/www/vhosts/<domain>/private/anthropic.key',
                 'configuration' => array('size' => 60, 'length' => 255),
+            )),
+
+            'key_stored' => new PasswordField(array(
+                'label'         => 'API key',
+                'required'      => false,
+                'hint'          => 'For "Stored here": paste the key (sk-ant-…). It is never shown again; '
+                                 . 'leaving the box empty keeps the stored key.',
+                'configuration' => array('size' => 60, 'length' => 300, 'key' => 'studio-prisma:ai-actions'),
+            )),
+
+            'key_stored_clear' => new BooleanField(array(
+                'label'         => 'Remove the stored key',
+                'default'       => false,
+                'configuration' => array('desc' => 'Deletes the key stored here when you save.'),
             )),
 
             'model' => new ChoiceField(array(
@@ -104,6 +132,34 @@ class AiActionsConfig extends PluginConfig
                 'configuration' => array('size' => 8, 'length' => 6, 'validator' => 'number'),
             )),
         );
+    }
+
+    /**
+     * Runs before the form is written. A pasted key must look like one; the
+     * "remove" box deletes the stored key (PasswordField itself never saves
+     * an empty value, it treats it as "unchanged").
+     */
+    function pre_save(&$config, &$errors)
+    {
+        $pasted = is_string($config['key_stored'] ?? null) ? trim($config['key_stored']) : '';
+        $clear = !empty($config['key_stored_clear']);
+        if ($clear && $pasted !== '') {
+            $errors['err'] = 'Either paste a new API key or remove the stored one, not both.';
+            return false;
+        }
+        if ($pasted !== '' && !AiActionsKey::isKey($pasted)) {
+            $errors['err'] = 'That doesn\'t look like an Anthropic API key (sk-ant-…). Nothing was saved.';
+            return false;
+        }
+        if ($pasted !== '') {
+            $config['key_stored'] = $pasted;
+        }
+        if ($clear) {
+            $this->set('key_stored', '');
+            unset($config['key_stored']);
+        }
+        $config['key_stored_clear'] = false;
+        return true;
     }
 
     /** @return array<int, string> role ID => name */

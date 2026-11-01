@@ -73,11 +73,16 @@ class AiActionsPlugin extends Plugin
             'roles'    => $config->get('roles'),
             'model'    => $config->get('model'),
             'effort'   => $config->get('effort'),
+            'key_source' => $config->get('key_source'),
             'key_file' => $config->get('key_file'),
             'daily_requests' => $config->get('daily_requests'),
             'daily_tokens'   => $config->get('daily_tokens'),
             'thread_chars'   => $config->get('thread_chars'),
-        ));
+        ), static function () use ($config) {
+            // PluginConfig decrypts PasswordField values when it loads.
+            $v = $config->get('key_stored');
+            return is_string($v) ? $v : null;
+        });
         if (!AiActionsController::settings()['enabled']) {
             return;
         }

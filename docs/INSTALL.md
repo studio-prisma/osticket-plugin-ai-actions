@@ -34,7 +34,17 @@ Stop if: you can't reach `include/plugins/` or a folder outside the osTicket dir
 
 1. In the Anthropic console, create a workspace just for this, e.g. `osticket-ai`, and set a **monthly spending limit** for it.
 2. Create an API key in that workspace.
-3. On the server, put the key into a file outside the osTicket directory. The file holds the key and nothing else:
+3. Decide where the plugin reads it from. You pick one in the settings ("Where the API key comes from"); only that one counts.
+
+| Way | Where the key lives | Who can get at it | When |
+|---|---|---|---|
+| **A. Key file** (recommended) | a file outside the osTicket directory | whoever can read that file on the server | default; never in the database or a database backup |
+| **B. Environment variable** | `ANTHROPIC_API_KEY` of the web server or PHP-FPM pool | whoever can read the server or panel configuration | if your panel manages PHP settings anyway |
+| **C. Stored in osTicket** | the plugin settings, encrypted by osTicket with `SECRET_SALT` from `include/ost-config.php` | whoever has **both** the database and the osTicket files; a database dump alone isn't enough | no shell or file access, or you prefer to paste it in the Admin Panel |
+
+### A. Key file
+
+The file holds the key and nothing else:
 
 ```bash
 sudo mkdir -p /etc/osticket-ai
@@ -43,24 +53,28 @@ sudo chown root:www-data /etc/osticket-ai/anthropic.key           # your web ser
 sudo chmod 640 /etc/osticket-ai/anthropic.key
 ```
 
-Check, as the web server user:
+Check, as the web server user: `sudo -u www-data head -c 7 /etc/osticket-ai/anthropic.key; echo` prints `sk-ant-`.
 
-```bash
-sudo -u www-data head -c 7 /etc/osticket-ai/anthropic.key; echo   # prints: sk-ant-
-```
-
-**On Plesk** (or another panel with `open_basedir`) PHP may only read inside the subscription; `/etc/…` is off limits there. The right place is the subscription's `private` folder, which the web server never serves:
+**On Plesk** (or another panel with `open_basedir`) PHP may only read inside the subscription; `/etc/…` is off limits there. Use the subscription's `private` folder, which the web server never serves:
 
 1. Plesk → Websites & Domains → Files → folder `private` (next to `httpdocs`)
 2. New file `anthropic.key`, paste the key, save. A line break or a BOM at the start doesn't matter
 3. File permissions: `600` (only the subscription user PHP runs as)
-4. In the plugin settings: `/var/www/vhosts/<your-domain>/private/anthropic.key`
+4. Path for the settings: `/var/www/vhosts/<your-domain>/private/anthropic.key`
 
 Check over SSH: `sudo -u <subscription-user> head -c 7 /var/www/vhosts/<your-domain>/private/anthropic.key; echo` prints `sk-ant-`. Under Plesk → PHP Settings, `open_basedir` must keep its default `{WEBSPACEROOT}{/}{:}{TMP}{/}` (or otherwise include the `private` folder).
 
-Stop if: the check fails, or the only place you can write is inside the osTicket directory. The plugin refuses key files there (anything under the web root can end up in a backup or a download).
+Stop if: the check fails, or the only place you can write is inside the osTicket directory. The plugin refuses key files there (anything under the web root can end up in a backup or a download). Use B or C instead.
 
-Alternative: set `ANTHROPIC_API_KEY` in the web server's environment (PHP-FPM pool `env[ANTHROPIC_API_KEY]`, Apache `SetEnv`) and leave the key file setting empty. Never put the key into the plugin settings or a file in the repository.
+### B. Environment variable
+
+Set `ANTHROPIC_API_KEY` where PHP gets its environment: PHP-FPM pool `env[ANTHROPIC_API_KEY] = sk-ant-…`, Apache `SetEnv ANTHROPIC_API_KEY sk-ant-…`, on Plesk under PHP Settings → additional directives of the subscription. Reload PHP-FPM or Apache.
+
+### C. Stored in osTicket
+
+Nothing to do on the server. In step 3 you paste the key into the setting "API key". osTicket encrypts it before saving; the box stays empty afterwards and only shows dots. Leaving it empty on a later save keeps the stored key; "Remove the stored key" deletes it.
+
+Whichever way: never put the key into a file in a repository, a ticket, a mail or a chat.
 
 ---
 
@@ -92,7 +106,8 @@ Check: `include/plugins/ai-actions/plugin.php` exists and is readable by the web
 |---|---|
 | AI assistant in the agent panel | on |
 | Agents with these primary roles | **only your own role** for now |
-| API key file | `/etc/osticket-ai/anthropic.key` |
+| Where the API key comes from | the way you chose in step 1 |
+| API key file / API key | for A the path, for C the key; for B nothing |
 | Model, Effort | defaults (Claude Opus 5.5, Low) |
 | Messages, Tokens | defaults (100, 500,000), or lower for the test |
 | Thread length | default (12,000) |
@@ -116,7 +131,7 @@ Stop if:
 | You see | Cause |
 |---|---|
 | no bubble | instance not enabled, or your primary role isn't selected |
-| "The AI connection is not set up" | key not found. The PHP error log has `ai-actions: no usable API key (<reason>)`: `file_unreadable` (path or permissions), `outside_open_basedir` (the file is outside what PHP may read; on Plesk use the `private` folder), `file_in_webroot`, `bad_format` (more than the key in the file), `no_key` |
+| "The AI connection is not set up" | key not found. The PHP error log has `ai-actions: no usable API key (<way>: <reason>)`: `no_key` (nothing found for the chosen way: no path, variable unset, nothing stored), `file_unreadable` (path or permissions), `outside_open_basedir` (the file is outside what PHP may read; on Plesk use the `private` folder), `file_in_webroot`, `bad_format` (more than the key in the file or variable) |
 | "The AI is not reachable right now" | outbound HTTPS to `api.anthropic.com` blocked, or Anthropic overloaded; the log has `model call failed (unavailable) HTTP <code>` |
 
 ---
@@ -145,7 +160,7 @@ Stop if: 5.2 changes the ticket before Run, or 5.7 sends anything to the custome
 
 | Check | How | Expected |
 |---|---|---|
-| Key not stored by osTicket | `SELECT value FROM ost_config WHERE value LIKE 'sk-ant%';` (your table prefix) | no row |
+| Key not in clear text in the database | `SELECT value FROM ost_config WHERE value LIKE '%sk-ant%';` (your table prefix) | no row, whichever way you chose (C stores it encrypted) |
 | Key not in the logs | `grep -c sk-ant` on the web server and PHP error logs | 0 |
 | Role gate | Log in as the test agent, whose role isn't selected | no bubble; `POST /scp/ajax.php/ai/plan` answers 404 |
 | Permissions | Select the test agent's role, give that role no "Close" permission, ask "close this ticket", Run | the status line fails with "permission denied", the ticket stays open |
@@ -172,4 +187,4 @@ Replace the folder `include/plugins/ai-actions/` with the new release. Settings 
 DROP TABLE ost_ai_actions_run, ost_ai_actions_chat, ost_ai_actions_usage;
 ```
 
-3. Delete the key file and revoke the key in the Anthropic console.
+3. Revoke the key in the Anthropic console, and delete the key file (A) or the environment variable (B). A key stored in osTicket (C) goes with the plugin's settings when you delete the plugin.

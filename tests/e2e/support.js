@@ -81,4 +81,17 @@ function sql(statement) {
   ], { encoding: 'utf8' }).trim();
 }
 
-module.exports = { env, seed, requireSeed, watchErrors, staffLogin, openTicket, aiPost, sql, LOCAL };
+/**
+ * Runs PHP inside the osTicket container with osTicket loaded (constants such
+ * as SECRET_SALT, classes such as Crypto). Returns stdout, trimmed.
+ */
+function php(code) {
+  const boot = "chdir('/var/www/html'); $_SERVER['SCRIPT_NAME']='/x.php'; $_SERVER['REMOTE_ADDR']='127.0.0.1';"
+    + " $_SERVER['HTTP_HOST']='localhost'; require 'main.inc.php'; ";
+  return execFileSync('docker', [
+    'compose', '-p', env.SPA_PROJECT || 'spa-dev', '--env-file', path.join(LOCAL, 'credentials.env'), '-f', COMPOSE,
+    'exec', '-T', 'osticket', 'php', '-r', boot + code,
+  ], { encoding: 'utf8' }).trim();
+}
+
+module.exports = { env, seed, requireSeed, watchErrors, staffLogin, openTicket, aiPost, sql, php, LOCAL };

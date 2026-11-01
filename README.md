@@ -53,8 +53,8 @@ Full guide: **[docs/INSTALL.md](docs/INSTALL.md)** ([deutsch](docs/INSTALL.de.md
 Short version:
 
 1. Download `ai-actions-<version>.zip` from the [latest release](https://github.com/studio-prisma/osticket-plugin-ai-actions/releases/latest) and unzip it into `include/plugins/`.
-2. Put the API key into a file **outside** the osTicket directory, readable by the web server only.
-3. Admin Panel → Manage → Plugins → Add New Plugin → **AI Actions** → Install, add an instance, set the key file and the roles, enable it.
+2. Decide where the key lives: a file **outside** the osTicket directory (recommended), the web server's environment, or pasted into the plugin settings, where osTicket stores it encrypted.
+3. Admin Panel → Manage → Plugins → Add New Plugin → **AI Actions** → Install, add an instance, choose the key source, set the roles, enable it.
 
 ---
 
@@ -64,14 +64,17 @@ Short version:
 |---|---|---|
 | AI assistant in the agent panel | off | Master switch |
 | Agents with these primary roles | none | Who sees the bubble. Nothing selected means nobody |
-| API key file | empty | Absolute path to a file that holds only the key. Empty: `ANTHROPIC_API_KEY` from the environment. Files inside the osTicket directory are refused |
+| Where the API key comes from | Key file | Key file, environment variable `ANTHROPIC_API_KEY`, or stored here. Only the chosen source counts |
+| API key file | empty | For "Key file": absolute path to a file that holds only the key. Files inside the osTicket directory are refused |
+| API key | empty | For "Stored here": the key, encrypted by osTicket with `SECRET_SALT` from `ost-config.php`; never shown again, an empty box keeps it |
+| Remove the stored key | off | Deletes the stored key on save |
 | Model | Claude Opus 5.5 | Or Claude Sonnet 5.5 (cheaper) |
 | Effort | Low | How long the model thinks. Low is enough for most requests |
 | Messages | 100 | Per agent and day, 0 = no limit |
 | Tokens | 500,000 | Input plus output per agent and day, 0 = no limit |
 | Thread length | 12,000 | Characters of the thread the model reads, newest first (2,000 to 50,000) |
 
-The key is never a setting: osTicket stores plugin settings in plain text in its database.
+Which source to choose: a key file keeps the key out of the database and its backups entirely. Stored in the settings, it is encrypted, but someone with both the database and the osTicket files can decrypt it. The environment variable sits wherever your server or panel keeps PHP settings. The install guide compares the three.
 
 A message usually costs 1,000 to 5,000 tokens, about one cent with Opus 5.5 at low effort. A reply takes 3 to 15 seconds.
 

@@ -23,12 +23,16 @@ final class AiActionsController
 
     /** @var array */
     private static $settings = array('enabled' => false, 'roles' => array(), 'model' => 'claude-opus-5-5',
-                                     'effort' => 'low', 'key_file' => '', 'daily_requests' => 100,
+                                     'effort' => 'low', 'key_source' => 'file', 'key_file' => '', 'daily_requests' => 100,
                                      'daily_tokens' => 500000, 'thread_chars' => 12000);
 
-    public static function configure(array $raw): void
+    /** @var callable|null returns the stored key, decrypted; kept out of $settings on purpose */
+    private static $storedKey;
+
+    public static function configure(array $raw, ?callable $storedKey = null): void
     {
         self::$settings = self::normalise($raw);
+        self::$storedKey = $storedKey;
     }
 
     public static function settings(): array
@@ -46,6 +50,8 @@ final class AiActionsController
             'roles'    => array_map('intval', self::keyList($raw['roles'] ?? null, '/^[1-9]\d{0,9}$/')),
             'model'    => in_array($model[0] ?? '', self::MODELS, true) ? $model[0] : self::MODELS[0],
             'effort'   => in_array($effort[0] ?? '', self::EFFORTS, true) ? $effort[0] : 'low',
+            'key_source' => in_array(self::keyList($raw['key_source'] ?? null, '/^[a-z]+$/')[0] ?? '', AiActionsKey::SOURCES, true)
+                ? self::keyList($raw['key_source'], '/^[a-z]+$/')[0] : 'file',
             'key_file' => is_string($raw['key_file'] ?? null) ? trim($raw['key_file']) : '',
             // 0 = no limit, for admins who cap spend in the Anthropic console instead.
             'daily_requests' => self::number($raw['daily_requests'] ?? null, 100, 0, 10000),
@@ -451,9 +457,10 @@ final class AiActionsController
         if (getenv('SPA_AI_FAKE') === '1') {
             return new AiActionsFakeLlm(self::now(self::timezone($GLOBALS['thisstaff']))->format('Y-m-d'));
         }
-        $key = AiActionsKey::load(self::$settings['key_file'], defined('ROOT_DIR') ? ROOT_DIR : dirname(INCLUDE_DIR));
+        $key = AiActionsKey::load(self::$settings['key_source'], self::$settings['key_file'],
+            defined('ROOT_DIR') ? ROOT_DIR : dirname(INCLUDE_DIR), self::$storedKey);
         if ($key['key'] === null) {
-            error_log('ai-actions: no usable API key (' . $key['problem'] . ')');
+            error_log('ai-actions: no usable API key (' . self::$settings['key_source'] . ': ' . $key['problem'] . ')');
             return null;
         }
         return new AiActionsClaude($key['key'], self::$settings['model'], self::$settings['effort']);
