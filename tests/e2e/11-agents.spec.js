@@ -108,3 +108,12 @@ test('status: without a cron run the page says what to set up', () => {
   sql("DELETE FROM ost_ai_actions_state WHERE name='cron_last'");
   expect(php('var_dump(AiActionsJobs::cronAge());')).toBe('NULL');
 });
+
+test('admin page: the tabs are real links (osTicket\'s ul.tabs script must not swallow the clicks)', async ({ page }) => {
+  await staffLogin(page, 'admin');
+  await page.goto('/scp/ajax.php/ai/admin?tab=agents');
+  for (const [label, heading] of [['Rules', 'Rules'], ['Log', 'Log'], ['Status', 'Status'], ['AI agents', 'AI agents']]) {
+    await page.locator('.spa-admin-tabs a', { hasText: label }).click();
+    await expect(page.locator('h2').first()).toHaveText(heading);
+  }
+});

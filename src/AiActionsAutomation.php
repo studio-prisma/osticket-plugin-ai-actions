@@ -336,13 +336,13 @@ final class AiActionsAutomation
             $rule = AiActionsRules::get((int) $r['rule_id']);
             $parts = array();
             foreach ((array) json_decode((string) $r['results'], true) as $x) {
-                $parts[] = sprintf('%s %s: %s', !empty($x['ok']) ? '✓' : '✕', $x['label'] ?? '', mb_substr((string) ($x['value'] ?? ''), 0, 80));
+                $parts[] = sprintf('%s %s: %s', $r['mode'] === 'propose' ? '•' : (!empty($x['ok']) ? '✓' : '✕'), $x['label'] ?? '', mb_substr((string) ($x['value'] ?? ''), 0, 80));
             }
             $guard = (array) json_decode((string) $r['guard'], true);
             $undo = in_array($r['mode'], array('auto', 'admin'), true) && !$r['undone'] && strtotime($r['created']) > time() - self::UNDO_HOURS * 3600
                 ? AiActionsAdmin::button('log_undo', 'Undo', array('log_id' => (string) $r['id'])) : ($r['undone'] ? 'undone' : '');
             $rows .= sprintf('<tr><td>%s</td><td><a href="%s">#%s</a></td><td>%s</td><td>%s</td><td>%s</td><td>%s%s</td><td>%d</td><td>%s</td></tr>',
-                call_user_func($e, (string) $r['created']), call_user_func($e, ROOT_PATH . 'scp/tickets.php?id=' . (int) $r['ticket_id']),
+                call_user_func($e, AiActionsTime::fromDb((string) $r['created'], AiActionsTime::dbZone(), AiActionsTime::zone($GLOBALS['thisstaff'] ?? null)) ?: (string) $r['created']), call_user_func($e, ROOT_PATH . 'scp/tickets.php?id=' . (int) $r['ticket_id']),
                 call_user_func($e, $r['mode'] === 'admin' ? 'settings' : (string) $r['number']),
                 call_user_func($e, $r['mode'] === 'admin' ? 'admin chat' : ($rule ? $rule['name'] : '#' . $r['rule_id'])),
                 call_user_func($e, trim($r['firstname'] . ' ' . $r['lastname'])), call_user_func($e, (string) $r['mode']),
@@ -350,7 +350,7 @@ final class AiActionsAutomation
                 $guard ? '<br><span class="faded">send guard: ' . call_user_func($e, !empty($guard['ok']) ? 'ok' : implode(', ', (array) ($guard['reasons'] ?? array()))) . '</span>' : '',
                 (int) $r['tokens'], $undo);
         }
-        return '<h2>Log</h2><p class="faded">Every run of a rule, newest first. Automatic runs can be undone for '
+        return '<h2>Log</h2><p class="faded">Every run of a rule, newest first, in your time zone. • = proposal, waits in the ticket chat; ✓/✕ = ran or failed. Automatic runs can be undone for '
             . self::UNDO_HOURS . ' hours (not sent replies).</p><table class="list" width="100%"><thead><tr><th>When</th><th>Ticket</th>'
             . '<th>Rule</th><th>AI agent</th><th>Mode</th><th>Result</th><th>Tokens</th><th></th></tr></thead><tbody>'
             . ($rows ?: '<tr><td colspan="8">Nothing yet.</td></tr>') . '</tbody></table>';

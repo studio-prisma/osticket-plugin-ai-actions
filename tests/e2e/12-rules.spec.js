@@ -167,3 +167,14 @@ test('send guard: the reviewer stops what the fixed checks let through', () => {
   expect(entries(id, 'R')).toBe(before);
   expect(sql(`SELECT guard FROM ost_ai_actions_log WHERE ticket_id=${id}`)).toContain('review_injection');
 });
+
+test('log: a proposal is marked as waiting, not as failed', async ({ page }) => {
+  rule('Assist log', { trigger: 'new_ticket', task: 'priority high', actions: ['set_priority'], mode: 'propose' });
+  newTicket('Proposal log', 'Hello');
+  cron();
+  await staffLogin(page, 'admin');
+  await page.goto('/scp/ajax.php/ai/admin?tab=log');
+  const cell = page.locator('table.list tbody tr').first();
+  await expect(cell).toContainText('• Priority');
+  await expect(cell).not.toContainText('✕');
+});

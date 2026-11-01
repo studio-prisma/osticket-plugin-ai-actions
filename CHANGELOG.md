@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-01
+
+### Fixed
+
+- The tabs of the admin page (AI agents, Rules, Log, Status) did nothing: they used osTicket's ul.tabs class, whose script takes over clicks for in-page panes.
+- The log marked the lines of a proposal with ✕ as if they had failed; they now show • (waiting in the ticket chat). Times are in the agent's time zone.
+
 ## [0.5.1] - 2026-11-01
 
 ### Fixed
@@ -108,7 +115,8 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.3.0...v0.4.0

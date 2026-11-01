@@ -116,7 +116,8 @@ final class AiActionsAdmin
     private static function tabs(string $active): string
     {
         $labels = array('agents' => 'AI agents', 'rules' => 'Rules', 'log' => 'Log', 'status' => 'Status');
-        $out = '<ul class="clean tabs spa-admin-tabs">';
+        // Not osTicket's ul.tabs: scp.js takes over clicks on those (in-page panes) and the links would do nothing.
+        $out = '<ul class="spa-admin-tabs">';
         foreach ($labels as $k => $l) {
             $out .= sprintf('<li class="%s"><a href="%s">%s</a></li>', $k === $active ? 'active' : '',
                 self::e(ROOT_PATH . AiActionsPlugin::STAFF_BASE . '/admin?tab=' . $k), self::e($l));
@@ -216,7 +217,7 @@ final class AiActionsAdmin
         $ost->addExtraHeader(sprintf('<base href="%s" />', self::e(ROOT_PATH . 'scp/')));
         ob_start();
         require STAFFINC_DIR . 'header.inc.php';
-        echo '<style>.spa-inline{display:inline;margin:0}.spa-admin-tabs{margin:10px 0 16px}.spa-flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px}'
+        echo '<style>.spa-inline{display:inline;margin:0}.spa-admin-tabs{list-style:none;margin:10px 0 16px;padding:0;display:flex;gap:4px;border-bottom:1px solid #ccd}.spa-admin-tabs li{margin:0}.spa-admin-tabs a{display:block;padding:6px 14px;border:1px solid transparent;border-bottom:0;border-radius:6px 6px 0 0;text-decoration:none}.spa-admin-tabs li.active a{border-color:#ccd;background:inherit;font-weight:600;margin-bottom:-1px}.spa-flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px}'
             . '.spa-flow span{border:1px solid #ccd;border-radius:8px;padding:6px 10px;background:#f6f7fb}.spa-flow i{color:#889}</style>';
         printf('<h1>%s</h1>', self::e($heading));
         echo $body;
