@@ -23,6 +23,9 @@ test('a password policy that rejects everything doesn\'t stop creating an AI age
 
 test('board actions: offered to the assistant, run with the board\'s checks', async ({ page }) => {
   test.skip(!seed.board, 'Ticket Board plugin not mounted');
+  // The board registers these actions from 0.6.0 on.
+  test.skip(php("echo is_file(INCLUDE_DIR . 'plugins/board/src/BoardAiTools.php') ? 1 : 0;").trim() !== '1',
+    'Ticket Board plugin older than 0.6.0');
   const id = seed.tickets.T1;
   php(`$t = Ticket::lookup(${id}); $s = Staff::lookup(${seed.agents.admin}); $e = array(); $t->assignToStaff($s, '', $e, false);`);
   expect(sql(`SELECT staff_id FROM ost_ticket WHERE ticket_id=${id}`)).toBe(String(seed.agents.admin));
