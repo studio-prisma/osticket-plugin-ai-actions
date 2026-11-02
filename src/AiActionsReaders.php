@@ -7,8 +7,9 @@ declare(strict_types=1);
  * once, no preview needed, because they change nothing. They only reach
  * what the agent can already open from this ticket:
  *
- *   read_related_ticket  the parent ticket or a sub-ticket (ticket_pid),
- *                        if the agent may open it
+ *   read_related_ticket  the parent ticket or a sub-ticket (ticket_pid), or
+ *                        an open ticket of the same customer (a possible
+ *                        lead ticket), if the agent may open it
  *   read_attachment      a file attached to a thread entry of this ticket
  *
  * Everything they return is customer data and goes back marked as such.
@@ -46,7 +47,8 @@ final class AiActionsReaders
         };
         return array(
             $one('read_related_ticket', 'Read the facts and thread of the parent ticket or a sub-ticket listed under '
-                . '"Related tickets" in <ticket_data>.', 'number', 'Ticket number without "#", from "Related tickets".'),
+                . '"Related tickets" in <ticket_data>, or of a possible lead ticket listed under "link_parent:" in <ticket_options> '
+                . '(to compare before planning link_parent).', 'number', 'Ticket number without "#".'),
             $one('read_attachment', 'Read an attachment listed under "Attachments" in <ticket_data>.', 'id',
                 'Attachment ID from the list.'),
         );
@@ -102,8 +104,11 @@ final class AiActionsReaders
         }
         $isChild = (int) ($other->ticket_pid ?? 0) === (int) $ticket->getId();
         $isParent = (int) ($ticket->ticket_pid ?? 0) === (int) $other->getId();
-        if ((!$isChild && !$isParent) || !$other->checkStaffPerm($staff)) {
-            return 'Only the parent ticket and sub-tickets the agent may open can be read.';
+        // A possible lead ticket (link_parent): open, same customer, not a sub-ticket itself.
+        $isCandidate = (int) $other->getId() !== (int) $ticket->getId() && $other->isOpen() && !$other->getPid()
+            && (int) $other->getOwnerId() === (int) $ticket->getOwnerId();
+        if ((!$isChild && !$isParent && !$isCandidate) || !$other->checkStaffPerm($staff)) {
+            return 'Only the parent ticket, sub-tickets and open tickets of the same customer the agent may open can be read.';
         }
         return AiActionsContext::data($other, $staff, $tz, 0, 8000)['text'];
     }

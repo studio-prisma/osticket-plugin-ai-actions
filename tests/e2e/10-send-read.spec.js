@@ -88,13 +88,21 @@ const read = (tool, input, ticket) => php(
   `$r = AiActionsReaders::run('${tool}', ${input}, Ticket::lookup(${ticket}), Staff::lookup(${ADMIN}), 'UTC', true);`
   + ' echo is_array($r) ? json_encode(array_column($r, "type")) : $r;');
 
-test('read_related_ticket: parent and sub-tickets only', () => {
+test('read_related_ticket: parent, sub-tickets and open tickets of the same customer only', () => {
   const subject = sql(`SELECT subject FROM ost_ticket__cdata WHERE ticket_id=${T2}`);
-  expect(read('read_related_ticket', `array('number' => '${seed.numbers.T2}')`, T1)).toContain('Only the parent');
+  // Same customer, open: a possible lead ticket (0.5.3).
+  expect(read('read_related_ticket', `array('number' => '${seed.numbers.T2}')`, T1)).toContain(subject);
   sql(`UPDATE ost_ticket SET ticket_pid=${T1} WHERE ticket_id=${T2}`);
   expect(read('read_related_ticket', `array('number' => '${seed.numbers.T2}')`, T1)).toContain(subject);
   expect(read('read_related_ticket', `array('number' => '${seed.numbers.T1}')`, T2)).toContain('<ticket_data>');
-  expect(read('read_related_ticket', `array('number' => '${seed.numbers.S1}')`, T1)).toContain('Only the parent');
+  // Another customer's ticket, and a closed one of the same customer: no.
+  const other = php("$e = array(); $t = Ticket::create(array('email' => 'reader@example.org', 'name' => 'Other Customer', 'subject' => 'Other',"
+    + " 'message' => 'Hello', 'deptId' => 1, 'ip' => '127.0.0.1', 'source' => 'API'), $e, 'api', false, false); echo $t ? $t->getNumber() : '';");
+  expect(read('read_related_ticket', `array('number' => '${other}')`, T1)).toContain('Only the parent');
+  const closed = php(`$e = array(); $t = Ticket::create(array('uid' => Ticket::lookup(${T1})->getOwnerId(), 'subject' => 'Closed one',`
+    + " 'message' => 'Hello', 'deptId' => 1, 'ip' => '127.0.0.1', 'source' => 'API'), $e, 'api', false, false);"
+    + ` $t->setStatus(TicketStatus::lookup(${seed.status.closed}), '', $e); echo $t->getNumber();`);
+  expect(read('read_related_ticket', `array('number' => '${closed}')`, T1)).toContain('Only the parent');
 });
 
 test('read_attachment: listed in the facts, readable on its ticket only, tags neutralised', () => {
