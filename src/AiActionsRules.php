@@ -128,6 +128,7 @@ final class AiActionsRules
             'statuses'     => $ints($in['statuses'] ?? array()),
             'sources'      => $pick($in['sources'] ?? array(), array_keys(self::SOURCES)),
             'contains'     => AiActionsController::cleanName(is_string($in['contains'] ?? null) ? $in['contains'] : '', ''),
+            'sender'       => AiActionsController::cleanName(is_string($in['sender'] ?? null) ? $in['sender'] : '', ''),
             'every'        => max(15, min(1440, is_scalar($in['every'] ?? null) ? (int) $in['every'] : 60)),
             'scope'        => isset(self::SCOPES[(string) ($in['scope'] ?? '')]) ? (string) $in['scope'] : 'overdue',
             'days'         => max(1, min(365, is_scalar($in['days'] ?? null) ? (int) $in['days'] : 3)),
@@ -140,7 +141,7 @@ final class AiActionsRules
      * Whether a ticket meets a rule's conditions. $t holds plain values so
      * the unit tests need no osTicket. Public for the unit tests.
      *
-     * @param array{dept:int, topic:int, priority:int, status:int, source:string, text:string} $t
+     * @param array{dept:int, topic:int, priority:int, status:int, source:string, text:string, sender?:string} $t
      */
     public static function matches(array $rule, array $t): bool
     {
@@ -152,19 +153,20 @@ final class AiActionsRules
         if ($rule['sources'] && !in_array(strtolower((string) $t['source']), $rule['sources'], true)) {
             return false;
         }
-        if ($rule['contains'] !== '') {
-            $hit = false;
-            foreach (array_filter(array_map('trim', explode(',', $rule['contains']))) as $word) {
-                if (stripos((string) $t['text'], $word) !== false) {
-                    $hit = true;
-                    break;
-                }
-            }
-            if (!$hit) {
-                return false;
+        return self::anyOf($rule['contains'], (string) $t['text'])
+            && self::anyOf($rule['sender'] ?? '', (string) ($t['sender'] ?? ''));
+    }
+
+    /** Empty list, or one of its comma-separated words is in $haystack. */
+    private static function anyOf(string $list, string $haystack): bool
+    {
+        $words = array_filter(array_map('trim', explode(',', $list)));
+        foreach ($words as $word) {
+            if (stripos($haystack, $word) !== false) {
+                return true;
             }
         }
-        return true;
+        return !$words;
     }
 
     /** Plain values of a ticket for matches(). */
@@ -175,6 +177,9 @@ final class AiActionsRules
         if ($last && ($body = $last->getBody())) {
             $text .= "\n" . $body->getSearchable();
         }
+        // Who wrote the latest customer message; the ticket's owner before there is one.
+        $user = $last ? $last->getUser() : null;
+        $sender = $user ? (string) $user->getEmail() : (string) $ticket->getEmail();
         $prio = $ticket->getPriority();
         return array(
             'dept'     => (int) $ticket->getDeptId(),
@@ -183,6 +188,7 @@ final class AiActionsRules
             'status'   => (int) $ticket->getStatusId(),
             'source'   => (string) $ticket->getSource(),
             'text'     => $text,
+            'sender'   => $sender,
         );
     }
 
@@ -354,6 +360,9 @@ final class AiActionsRules
         if ($rule['contains'] !== '') {
             $conds[] = 'text contains "' . $rule['contains'] . '"';
         }
+        if ($rule['sender'] !== '') {
+            $conds[] = 'sender contains "' . $rule['sender'] . '"';
+        }
         $acts = array_map(static function ($a) {
             return self::ACTIONS[$a];
         }, $rule['actions']);
@@ -437,6 +446,9 @@ final class AiActionsRules
             . $row('Sources', '<select name="sources[]" multiple size="5">' . $opt(self::SOURCES, $r['sources'], true) . '</select>')
             . $row('Text contains', sprintf('<input name="contains" size="40" maxlength="60" value="%s">', call_user_func($e, $r['contains'])),
                 'Subject or latest customer message; several words separated by commas, any one matches.')
+            . $row('Sender contains', sprintf('<input name="sender" size="40" maxlength="60" value="%s">', call_user_func($e, $r['sender'])),
+                'Email address of whoever wrote the latest customer message, e.g. "noreply@example.com" or "@example.com"; '
+                . 'several separated by commas, any one matches. Combined with the other conditions, all must match.')
             . $row('AI agent', '<select name="agent">' . $opt($agentChoices, $r['agent']) . '</select>')
             . $row('Task', sprintf('<textarea name="task" rows="8" cols="70" maxlength="%d">%s</textarea>', self::TASK_MAX, call_user_func($e, $r['task'])),
                 'What the AI agent should do, e.g. "Set the priority from the urgency the customer describes and assign the right team."')

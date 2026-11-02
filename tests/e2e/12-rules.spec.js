@@ -91,6 +91,23 @@ test('conditions: a ticket outside the rule\'s department queues nothing', () =>
   expect(sql(`SELECT COUNT(*) FROM ost_ai_actions_job WHERE ticket_id=${id}`)).toBe('0');
 });
 
+test('conditions: sender contains matches the customer\'s address, saved through the form', async ({ page }) => {
+  rule('Other sender', { trigger: 'new_ticket', task: 'priority high', actions: ['set_priority'], mode: 'auto', sender: 'bob@acme.example' });
+  rule('Acme', { trigger: 'new_ticket', task: 'priority high', actions: ['set_priority'], mode: 'auto', sender: 'nobody@x.example, @ACME.example' });
+  const id = newTicket('Sender', 'Hello');
+  expect(sql(`SELECT r.name FROM ost_ai_actions_job j JOIN ost_ai_actions_rule r ON r.id=j.rule_id WHERE j.ticket_id=${id}`)).toBe('Acme');
+
+  await staffLogin(page, 'admin');
+  await page.goto('/scp/ajax.php/ai/admin?tab=rules');
+  await page.locator('input[name="name"]').fill('From Moodle');
+  await page.locator('select[name="agent"]').selectOption(String(AGENT));
+  await page.locator('textarea[name="task"]').fill('priority low');
+  await page.locator('input[name="actions[]"][value="set_priority"]').check();
+  await page.locator('input[name="sender"]').fill('moodle@acme.example');
+  await page.locator('input[type="submit"][value="Save rule"]').click();
+  await expect(page.locator('.spa-rule', { hasText: 'From Moodle' }).locator('.spa-flow')).toContainText('sender contains "moodle@acme.example"');
+});
+
 test('emergency stop: nothing runs while paused', () => {
   rule('Paused', { trigger: 'new_ticket', task: 'priority high', actions: ['set_priority'], mode: 'auto' });
   const id = newTicket('Paused', 'Hello');
