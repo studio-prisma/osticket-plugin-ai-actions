@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-02
+
+### Fixed
+
+- With SMTP, mail failed after an AI agent was alerted: its `@example.com` address is refused by mail servers, and osTicket 1.18 then fails every further mail of the same run ("Cannot issue HELO to existing session"), alerts to people included. Each AI agent's address can now be set on the *AI agents* tab, with the checks of osTicket's agent form plus a refusal of the help desk's own addresses, which osTicket would fetch back. The *Status* tab warns while an AI agent has an address no mail server delivers to ([RULES](docs/RULES.md)).
+- The form for a new AI agent offered disabled departments, which osTicket then refused.
+
 ## [0.5.3] - 2026-11-02
 
 ### Added
@@ -146,7 +153,8 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.0...v0.5.1

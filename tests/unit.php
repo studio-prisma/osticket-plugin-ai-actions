@@ -967,5 +967,11 @@ check('0.5.3: topic and parent link can be undone', AiActionsTools::undoable('se
 check('0.5.3: rules can allow the new actions', isset(AiActionsRules::ACTIONS['set_topic'], AiActionsRules::ACTIONS['link_parent'])
     && AiActionsRules::normalise(array('actions' => array('set_topic', 'link_parent', 'evil')))['actions'] === array('set_topic', 'link_parent'));
 
+check('0.5.4: reserved mail domains are recognised', AiActionsAgents::reservedDomain('ai-bot-1a2b3c@example.com')
+    && AiActionsAgents::reservedDomain('x@mail.example.org') && AiActionsAgents::reservedDomain('x@host.invalid')
+    && AiActionsAgents::reservedDomain('x@shop.test') && AiActionsAgents::reservedDomain('no-at-sign'));
+check('0.5.4: real domains are not reserved', !AiActionsAgents::reservedDomain('team@helpdesk-example.de')
+    && !AiActionsAgents::reservedDomain('ki@badexample.com') && !AiActionsAgents::reservedDomain('x@example.com.de'));
+
 echo "\n$count checks, $failures failed\n";
 exit($failures ? 1 : 0);
