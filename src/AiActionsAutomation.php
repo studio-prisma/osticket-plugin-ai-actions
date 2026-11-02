@@ -337,13 +337,22 @@ final class AiActionsAutomation
             return false;
         }
         $lines = array();
+        $any = false;
+        $tried = false;
         foreach (array_reverse((array) json_decode((string) $row['results'], true)) as $r) {
             if (empty($r['ok']) || !empty($r['unchanged']) || !AiActionsTools::undoable((string) ($r['action'] ?? ''))) {
                 continue;
             }
             $u = AiActionsExecutor::undo($ticket, $thisstaff, (string) $r['action'], $r['previous'] ?? null);
+            $tried = true;
+            $any = $any || $u['ok'];
             $lines[] = sprintf('- %s: %s (%s)', $r['label'] ?? '', $r['value'] ?? '', $u['ok'] ? 'put back' : 'failed: ' . ($u['error'] ?? ''));
             $ticket = Ticket::lookup($ticket->getId());
+        }
+        if ($tried && !$any) {
+            // Nothing could be put back (e.g. the agent lacks the permissions): someone else may still undo it.
+            db_query(sprintf('UPDATE `%s` SET undone=0 WHERE id=%d', self::logTable(), $id));
+            return false;
         }
         $errors = array();
         $ticket->postNote(array('title' => 'AI action undone', 'note' => new TextThreadEntryBody(

@@ -91,6 +91,18 @@ test('undo from a chat only reaches runs of that ticket', () => {
   expect(priority(a)).toBe('high');
 });
 
+test('an undo that puts nothing back leaves the run undoable for someone else', () => {
+  rule('Auto perms', { trigger: 'new_ticket', task: 'priority high', actions: ['set_priority'], mode: 'auto' });
+  const id = newTicket('Run perms', 'Hello');
+  cron();
+  const log = Number(sql(`SELECT id FROM ost_ai_actions_log WHERE ticket_id=${id}`));
+  // The sales agent has no permissions on Support tickets: every step fails.
+  const r = php(`$GLOBALS['thisstaff'] = Staff::lookup(${seed.agents.salesagent}); var_export(AiActionsAutomation::undo(${log}, ${id}));`);
+  expect(r).toBe('false');
+  expect(sql(`SELECT undone FROM ost_ai_actions_log WHERE id=${log}`)).toBe('0');
+  expect(priority(id)).toBe('high');
+});
+
 test('the AI agent\'s picture shows at its thread entries', async ({ page }) => {
   const errors = watchErrors(page);
   rule('Note', { trigger: 'new_ticket', task: 'a note', actions: ['add_internal_note'], mode: 'auto' });
