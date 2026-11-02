@@ -17,6 +17,10 @@ declare(strict_types=1);
  *   3. auth.login.succeeded / auth.pwreset.login end the session at once,
  *      should a future osTicket version let one through.
  *
+ * osTicket's agent form doesn't list the "ai-agent" backend, so saving the
+ * account there would set it to "any"; it also lets an admin set a password.
+ * guard() puts both back after every save of an AI agent's record.
+ *
  * osTicket alerts AI agents like any other agent (new ticket, assignment,
  * …). A new AI agent gets name@example.com (RFC 2606). Without SMTP that is
  * enough; with SMTP the server refuses the address, and osTicket 1.18 then
@@ -251,6 +255,37 @@ final class AiActionsAgents
             }
         }
         return null;
+    }
+
+    /**
+     * Signal handler for model.updated: an AI agent saved through osTicket's
+     * agent form gets its backend back, and a password set there is replaced
+     * by an unknown one. Straight to the database, so no second save (and no
+     * second signal) follows; everything else from the form stays.
+     */
+    public static function guard($model, $data = null): void
+    {
+        if (!($model instanceof Staff) || !self::isAgent((int) $model->getId())) {
+            return;
+        }
+        $dirty = is_array($data) && is_array($data['dirty'] ?? null) ? $data['dirty'] : array();
+        $set = array();
+        if ((string) $model->backend !== self::BACKEND) {
+            $set['backend'] = self::BACKEND;
+        }
+        if (array_key_exists('passwd', $dirty)) {
+            $set['passwd'] = Passwd::hash(bin2hex(random_bytes(32)));
+        }
+        if (!$set) {
+            return;
+        }
+        $sql = array();
+        foreach ($set as $k => $v) {
+            $sql[] = sprintf('`%s`=%s', $k, db_input($v));
+            $model->ht[$k] = $v;
+        }
+        db_query(sprintf('UPDATE `%s` SET %s WHERE staff_id=%d', STAFF_TABLE, implode(', ', $sql), (int) $model->getId()));
+        error_log('ai-actions: AI agent ' . (int) $model->getId() . ' saved outside the plugin, restored: ' . implode(', ', array_keys($set)));
     }
 
     /** Signal handler: a session of an AI agent ends right away. */

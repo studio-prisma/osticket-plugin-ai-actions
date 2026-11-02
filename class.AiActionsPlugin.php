@@ -53,7 +53,7 @@ require_once __DIR__ . '/src/AiActionsAutomation.php';
 class AiActionsPlugin extends Plugin
 {
     /** Mirrors plugin.php; used for cache-busting the asset URLs only. */
-    public const VERSION = '0.5.4';
+    public const VERSION = '0.5.5';
 
     /** Route base, relative to ROOT_PATH. */
     public const STAFF_BASE = 'scp/ajax.php/ai';
@@ -125,6 +125,10 @@ class AiActionsPlugin extends Plugin
         });
         Signal::connect('auth.pwreset.login', static function ($staff) {
             AiActionsAgents::refuseLogin($staff);
+        });
+        // osTicket's agent form would reset their backend and can set a password.
+        Signal::connect('model.updated', static function ($model, $data = null) {
+            AiActionsAgents::guard($model, $data);
         });
         AiActionsJobs::$worker = array('AiActionsAutomation', 'work');
         Signal::connect('cron', static function () {
