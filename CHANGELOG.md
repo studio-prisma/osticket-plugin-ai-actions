@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-02
+
+### Added
+
+- Ticket action "Help topic" (`set_topic`): the topics the ticket view offers the agent. A topic with an SLA plan brings it along and the due date is recomputed. Undo puts topic and SLA back.
+- Ticket action "Parent ticket" (`link_parent`): hangs the ticket under an open ticket of the same customer, for duplicates and alert series. A note about this ticket is posted on the parent first. No chains: a sub-ticket or a ticket with sub-tickets gets no candidates. Undo removes the link; the note stays.
+- A waiting proposal of an AI agent shows as a dot on the chat bubble and on board cards (`GET /ai/marks`, only tickets the agent can open).
+- Automatic runs of the last 24 hours show in the ticket's chat, with undo for any agent who can open the ticket (`POST /ai/autoundo`, own permissions apply).
+- A picture per AI agent, on its proposal and run cards and at its thread entries.
+- Settings chat: create departments, give agents access to a department with a role or take it away, filters that reject tickets or send an email to fixed addresses. Undo for each ([ADMIN](docs/ADMIN.md)).
+- Other plugins' actions: the Ticket Board (0.6.0) adds "Release assignment" and "Mark as answered/unanswered".
+
+### Changed
+
+- One note per automatic run: the AI agent's own note followed by the list of changes; the rule's task is no longer repeated in it.
+- osTicket's events of an automatic run (priority, status, …) name the AI agent instead of SYSTEM.
+- A rule's task may be 3000 characters long (was 500).
+- `read_related_ticket` also reads open tickets of the same customer, so the model can compare a possible parent ticket before planning `link_parent`.
+
+### Fixed
+
+- A rule job on a ticket that was closed in the meantime (e.g. by a ticket filter) is skipped without a model call, unless the rule asks for statuses itself. The log shows "skipped: ticket closed".
+- Setting the status a ticket already has counts as unchanged instead of failed.
+- The log shows refused changes with their label and what the model asked for, instead of an empty "set_status:".
+- The help topic field asked osTicket for the signed-in agent, who doesn't exist in the cron.
+
+### Security
+
+- Automatic runs never close a ticket with priority High or Emergency; that is left to a person. Proposals a person confirms are not affected.
+
 ## [0.5.2] - 2026-11-01
 
 ### Fixed
@@ -115,7 +145,8 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.4.0...v0.5.0
