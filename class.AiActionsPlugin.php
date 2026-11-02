@@ -174,6 +174,12 @@ class AiActionsPlugin extends Plugin
         $dispatcher->append(url_post('^/ai/proposal$', static function () {
             return AiActionsController::proposal();
         }));
+        $dispatcher->append(url_get('^/ai/marks$', static function () {
+            return AiActionsController::marks();
+        }));
+        $dispatcher->append(url_post('^/ai/autoundo$', static function () {
+            return AiActionsController::autoUndo();
+        }));
         $dispatcher->append(url_get('^/ai/admin$', static function () {
             return AiActionsAdmin::page();
         }));

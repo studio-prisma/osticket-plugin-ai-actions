@@ -49,6 +49,11 @@ final class AiActionsAgents
             `created` DATETIME NOT NULL,
             PRIMARY KEY (`staff_id`)
         ) DEFAULT CHARSET=utf8mb4", self::table()));
+        // 0.5.3: a picture per AI agent. Checked, not ADD COLUMN IF NOT EXISTS: MySQL doesn't know that.
+        $res = db_query(sprintf("SHOW COLUMNS FROM `%s` LIKE 'image'", self::table()));
+        if ($res && !db_num_rows($res)) {
+            db_query(sprintf("ALTER TABLE `%s` ADD `image` VARCHAR(500) NOT NULL DEFAULT ''", self::table()));
+        }
         self::$ready = true;
     }
 
@@ -65,12 +70,12 @@ final class AiActionsAgents
         return isset(self::$ids[$staffId]);
     }
 
-    /** @return array<int, array{staff_id:int, name:string, dept:string, persona:string, model:string, active:bool}> */
+    /** @return array<int, array{staff_id:int, name:string, dept:string, persona:string, model:string, active:bool, image:string}> */
     public static function all(): array
     {
         self::ensure();
         $out = array();
-        $res = db_query(sprintf('SELECT a.staff_id, a.persona, a.model, a.active, s.firstname, s.lastname, d.name AS dept
+        $res = db_query(sprintf('SELECT a.staff_id, a.persona, a.model, a.active, a.image, s.firstname, s.lastname, d.name AS dept
             FROM `%s` a JOIN `%s` s ON s.staff_id=a.staff_id LEFT JOIN `%s` d ON d.id=s.dept_id ORDER BY s.firstname',
             self::table(), STAFF_TABLE, DEPT_TABLE));
         while ($res && ($r = db_fetch_array($res))) {
@@ -81,9 +86,35 @@ final class AiActionsAgents
                 'persona'  => (string) $r['persona'],
                 'model'    => (string) $r['model'],
                 'active'   => (bool) $r['active'],
+                // Checked again on the way out: the column may have been written by an older version or by hand.
+                'image'    => AiActionsController::imageUrl((string) $r['image']),
             );
         }
         return $out;
+    }
+
+    /** Picture URLs of AI agents that have one, by staff ID. */
+    public static function images(): array
+    {
+        $out = array();
+        foreach (self::all() as $a) {
+            if ($a['image'] !== '') {
+                $out[$a['staff_id']] = $a['image'];
+            }
+        }
+        return $out;
+    }
+
+    /** An https:// address or a path on this server (AiActionsController::imageUrl()), or '' to remove it. */
+    public static function setImage(int $staffId, string $url): bool
+    {
+        $url = trim($url);
+        $clean = AiActionsController::imageUrl($url);
+        if (!self::isAgent($staffId) || ($url !== '' && $clean === '')) {
+            return false;
+        }
+        db_query(sprintf('UPDATE `%s` SET image=%s WHERE staff_id=%d', self::table(), db_input($clean), $staffId));
+        return true;
     }
 
     /** Username and address for a name. Public for the unit tests. */
@@ -100,7 +131,7 @@ final class AiActionsAgents
      *
      * @return array{id:int, errors:array}
      */
-    public static function create(string $name, int $deptId, int $roleId, string $persona, string $model): array
+    public static function create(string $name, int $deptId, int $roleId, string $persona, string $model, string $image = ''): array
     {
         self::ensure();
         $name = AiActionsController::cleanName($name, '');
@@ -140,8 +171,8 @@ final class AiActionsAgents
         // An unknown password instead of none, so no login path ever depends on how an empty hash compares.
         $staff->passwd = Passwd::hash(bin2hex(random_bytes(32)));
         $staff->save();
-        db_query(sprintf("INSERT INTO `%s` (staff_id, persona, model, active, created) VALUES (%d, %s, %s, 1, NOW())",
-            self::table(), (int) $staff->getId(), db_input($persona), db_input($model)));
+        db_query(sprintf("INSERT INTO `%s` (staff_id, persona, model, active, created, image) VALUES (%d, %s, %s, 1, NOW(), %s)",
+            self::table(), (int) $staff->getId(), db_input($persona), db_input($model), db_input(AiActionsController::imageUrl($image))));
         self::$ids = null;
         return array('id' => (int) $staff->getId(), 'errors' => array());
     }

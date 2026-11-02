@@ -685,9 +685,47 @@ final class AiActionsController
         return self::json(200, array('results' => $undone));
     }
 
+    /**
+     * GET /ai/marks?ids=1,2,3: which of these tickets have an open proposal
+     * (the dot on the bubble and on board cards). With a single ID also the
+     * pictures of AI agents' thread entries on that ticket. Only tickets
+     * the agent can open count; the others are left out silently.
+     */
+    public static function marks(): string
+    {
+        global $thisstaff;
+
+        header('Cache-Control: no-store');
+        if (!self::allowed($thisstaff)) {
+            return self::json(404, array('error' => 'not_found'));
+        }
+        $raw = is_string($_GET['ids'] ?? null) ? $_GET['ids'] : '';
+        $ids = array_slice(array_values(array_unique(array_filter(array_map('intval', explode(',', $raw))))), 0, 300);
+        $marked = array();
+        foreach (AiActionsAutomation::withProposals($ids) as $id) {
+            if (self::visibleTicket($thisstaff, $id)) {
+                $marked[] = $id;
+            }
+        }
+        $out = array('proposals' => $marked);
+        if (count($ids) === 1 && self::visibleTicket($thisstaff, $ids[0])) {
+            $out['entries'] = (object) AiActionsAutomation::entryImages($ids[0]);
+        }
+        return self::json(200, $out);
+    }
+
+    /** POST /ai/autoundo: ticket_id, id — undo of an AI agent's automatic run from the ticket's chat. */
+    public static function autoUndo(): string
+    {
+        $ticket = self::guard();
+        $ok = AiActionsAutomation::undo((int) ($_POST['id'] ?? 0), (int) $ticket->getId());
+        return $ok ? self::json(200, array('ok' => true)) : self::json(422, array('error' => 'undo_expired'));
+    }
+
     private static function chatPayload($ticket, array $chat): array
     {
         return array(
+            'runs'       => AiActionsAutomation::recentRuns((int) $ticket->getId()),
             'proposals'  => AiActionsAutomation::proposals((int) $ticket->getId()),
             'ticket'     => array('id' => (int) $ticket->getId(), 'number' => (string) $ticket->getNumber()),
             'transcript' => AiActionsChatStore::forClient($chat['transcript']),

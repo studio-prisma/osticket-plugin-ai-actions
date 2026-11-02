@@ -73,6 +73,8 @@ final class AiActionsI18n
             'undo'         => 'Rückgängig',
             'undo_gone'    => 'Rückgängig geht nur bis %d Sekunden nach dem Ausführen.',
             'proposal_by'  => 'Vorschlag von %s',
+            'auto_by'      => 'Automatisch von %s',
+            'proposal_waiting' => 'Ein Vorschlag eines KI-Agenten wartet',
             'settings'     => 'Verwaltung',
             'admin_empty'  => 'Sag, was in der Verwaltung angelegt oder geändert werden soll: Textbausteine, Hilfethemen, Listen, SLA. Du siehst vorher alles im Vergleich und entscheidest. Gelöscht wird nie, nur deaktiviert.',
             'admin_suggestions' => array(
@@ -170,6 +172,8 @@ final class AiActionsI18n
             'undo'         => 'Undo',
             'undo_gone'    => 'Undo works only up to %d seconds after running.',
             'proposal_by'  => 'Proposal by %s',
+            'auto_by'      => 'Automatically by %s',
+            'proposal_waiting' => 'A proposal of an AI agent is waiting',
             'settings'     => 'Settings',
             'admin_empty'  => 'Say what to create or change in the settings: canned responses, help topics, lists, SLA plans. You see before and after and decide. Nothing is ever deleted, only disabled.',
             'admin_suggestions' => array(

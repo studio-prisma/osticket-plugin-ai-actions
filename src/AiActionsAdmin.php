@@ -71,7 +71,8 @@ final class AiActionsAdmin
         switch ($do) {
             case 'agent_create':
                 $r = AiActionsAgents::create((string) ($_POST['name'] ?? ''), (int) ($_POST['dept_id'] ?? 0),
-                    (int) ($_POST['role_id'] ?? 0), (string) ($_POST['persona'] ?? ''), (string) ($_POST['model'] ?? ''));
+                    (int) ($_POST['role_id'] ?? 0), (string) ($_POST['persona'] ?? ''), (string) ($_POST['model'] ?? ''),
+                    (string) ($_POST['image'] ?? ''));
                 $done = $r['id'] ? 'agent_created' : 'agent_failed';
                 if (!$r['id']) {
                     error_log('ai-actions: AI agent not created: ' . implode(', ', array_keys($r['errors'])));
@@ -84,6 +85,9 @@ final class AiActionsAdmin
                     AiActionsAgents::setActive($id, $do === 'agent_on');
                     $done = 'saved';
                 }
+                break;
+            case 'agent_image':
+                $done = AiActionsAgents::setImage((int) ($_POST['staff_id'] ?? 0), (string) ($_POST['image'] ?? '')) ? 'saved' : 'image_bad';
                 break;
             default:
                 if (class_exists('AiActionsRules')) {
@@ -108,6 +112,7 @@ final class AiActionsAdmin
             'saved'         => 'Saved.',
             'deleted'       => 'Deleted.',
             'undone'        => 'Undone.',
+            'image_bad'     => 'Picture not saved: use an https:// address or a path on this server, e.g. /images/bot.png.',
             'error'         => 'That didn\'t work.',
         );
         return $map[$code] ?? 'Saved.';
@@ -129,16 +134,20 @@ final class AiActionsAdmin
     {
         $rows = '';
         foreach (AiActionsAgents::all() as $a) {
-            $rows .= sprintf('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
-                self::e($a['name']), self::e($a['dept']), self::e($a['model'] ?: 'plugin default'),
+            $picture = ($a['image'] !== '' ? sprintf('<img src="%s" alt="" width="28" height="28" style="border-radius:50%%;object-fit:cover;vertical-align:middle;margin-right:6px">',
+                self::e($a['image'])) : '')
+                . self::form('agent_image', sprintf('<input type="hidden" name="staff_id" value="%d"><input name="image" size="28" maxlength="500" value="%s" placeholder="https://… or /path.png"> <input type="submit" class="button" value="Save">',
+                    (int) $a['staff_id'], self::e($a['image'])), 'spa-inline');
+            $rows .= sprintf('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
+                self::e($a['name']), self::e($a['dept']), self::e($a['model'] ?: 'plugin default'), $picture,
                 $a['active'] ? 'active' : 'paused',
                 self::button($a['active'] ? 'agent_off' : 'agent_on', $a['active'] ? 'Pause' : 'Resume',
                     array('staff_id' => (string) $a['staff_id'])));
         }
         $out = '<h2>AI agents</h2><p class="faded">Agent accounts the AI works as. Assign tickets to them like to anyone; '
-            . 'rules decide what they do. Nobody can sign in with them.</p>';
-        $out .= '<table class="list" width="100%"><thead><tr><th>Name</th><th>Department</th><th>Model</th><th>State</th><th></th></tr></thead><tbody>'
-            . ($rows ?: '<tr><td colspan="5">No AI agents yet.</td></tr>') . '</tbody></table>';
+            . 'rules decide what they do. Nobody can sign in with them. The picture shows in the ticket chat and at their thread entries.</p>';
+        $out .= '<table class="list" width="100%"><thead><tr><th>Name</th><th>Department</th><th>Model</th><th>Picture</th><th>State</th><th></th></tr></thead><tbody>'
+            . ($rows ?: '<tr><td colspan="6">No AI agents yet.</td></tr>') . '</tbody></table>';
 
         $depts = '';
         foreach (Dept::getDepartments() as $id => $name) {
@@ -159,6 +168,8 @@ final class AiActionsAdmin
             . '<tr><td>Role</td><td><select name="role_id">' . $roles . '</select> '
             . '<span class="faded">What the AI agent may do; it never gets more than this role.</span></td></tr>'
             . '<tr><td>Model</td><td><select name="model">' . $models . '</select></td></tr>'
+            . '<tr><td>Picture</td><td><input name="image" size="40" maxlength="500" placeholder="https://… or /path.png"> '
+            . '<span class="faded">Optional. Square images look best; shown round.</span></td></tr>'
             . '<tr><td>Persona</td><td><textarea name="persona" rows="3" cols="60" maxlength="500" '
             . 'placeholder="You are Prisma, the first-level assistant of …"></textarea></td></tr>'
             . '</tbody></table><p><input type="submit" class="button" value="Create AI agent"></p>');

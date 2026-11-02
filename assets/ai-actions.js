@@ -25,7 +25,7 @@
 
   // view: chat | history (list of earlier conversations) | archived (one of them, read only)
   var state = {
-    open: false, ticket: -1, number: '', transcript: [], proposals: [], turnsLeft: 0, busy: false, error: '',
+    open: false, ticket: -1, number: '', transcript: [], proposals: [], runs: [], turnsLeft: 0, busy: false, error: '',
     view: 'chat', history: null, archived: null,
   };
 
@@ -273,7 +273,7 @@
     if (state.view === 'history') return renderHistory();
     if (state.view === 'archived') return renderArchived();
 
-    if (!state.transcript.length && !state.proposals.length && !state.busy) {
+    if (!state.transcript.length && !state.proposals.length && !state.runs.length && !state.busy) {
       log.appendChild(el('p', 'spa-ai-hint spa-ai-welcome', state.ticket === 0 ? t.admin_empty : (cfg.welcome || t.empty)));
       var chips = el('div', 'spa-ai-chips');
       ((state.ticket === 0 ? t.admin_suggestions : t.suggestions) || []).forEach(function (s) {
@@ -285,6 +285,7 @@
       });
       log.appendChild(chips);
     }
+    state.runs.forEach(function (r) { log.appendChild(runCard(r)); });
     state.proposals.forEach(function (p) { log.appendChild(proposalCard(p)); });
     state.transcript.forEach(function (item) { log.appendChild(message(item)); });
     if (state.busy) {
@@ -388,10 +389,62 @@
     return card;
   }
 
+  /** Header line of an AI agent's card: its picture (if any), who, which rule. */
+  function agentLine(text, image) {
+    var line = el('div', 'spa-ai-proposal-by');
+    if (image) {
+      var img = el('img', 'spa-ai-agent-img');
+      img.alt = '';
+      img.src = image;
+      img.addEventListener('error', function () { img.remove(); });
+      line.appendChild(img);
+    }
+    line.appendChild(document.createTextNode(text));
+    return line;
+  }
+
+  /** An AI agent's automatic run of the last 24 hours, with undo while the server allows it. */
+  function runCard(r) {
+    var box = el('div', 'spa-ai-msg spa-ai-msg-ai spa-ai-autorun');
+    box.appendChild(agentLine(String(t.auto_by || '%s').replace('%s', r.by) + (r.rule ? ' · ' + r.rule : '')
+      + (r.when ? ' · ' + r.when : ''), r.image));
+    var card = el('div', 'spa-ai-plan spa-ai-plan-' + (r.undone ? 'undone' : 'done'));
+    var list = el('ul', 'spa-ai-plan-list');
+    (r.changes || []).forEach(function (c) {
+      var li = el('li', c.ok ? 'spa-ai-ok' : 'spa-ai-fail');
+      li.appendChild(el('span', 'spa-ai-plan-label', c.label));
+      li.appendChild(el('span', 'spa-ai-plan-value', c.value));
+      if (!c.ok) li.appendChild(el('span', 'spa-ai-plan-why', t.failed + ': ' + errorText(c.error)));
+      list.appendChild(li);
+    });
+    card.appendChild(list);
+    var foot = el('div', 'spa-ai-plan-foot');
+    foot.appendChild(el('span', 'spa-ai-plan-state', (t.states || {})[r.undone ? 'undone' : 'done'] || ''));
+    if (r.undoable) {
+      foot.appendChild(button('spa-ai-undo spa-ai-autorun-undo', t.undo || 'Undo', function () { autoUndo(r.id); }));
+    }
+    card.appendChild(foot);
+    box.appendChild(card);
+    return box;
+  }
+
+  function autoUndo(id) {
+    var ticket = state.ticket;
+    state.busy = 'undo';
+    state.error = '';
+    render();
+    request('POST', '/autoundo', { ticket_id: String(ticket), id: String(id) }).then(function () {
+      refreshTicket(ticket);
+    }).catch(fail).then(function () {
+      state.busy = false;
+      return load(ticket);
+    });
+  }
+
   /** A plan an AI agent made through a rule; anyone who can open the ticket decides, with their own rights. */
   function proposalCard(p) {
     var box = el('div', 'spa-ai-msg spa-ai-msg-ai spa-ai-proposal');
-    box.appendChild(el('div', 'spa-ai-proposal-by', String(t.proposal_by || '%s').replace('%s', p.by) + (p.rule ? ' · ' + p.rule : '')));
+    box.appendChild(agentLine(String(t.proposal_by || '%s').replace('%s', p.by) + (p.rule ? ' · ' + p.rule : ''), p.image));
     if (p.answer) box.appendChild(el('div', 'spa-ai-bubble', p.answer));
     var card = el('div', 'spa-ai-plan spa-ai-plan-open');
     card.appendChild(el('div', 'spa-ai-plan-title', t.preview));
@@ -446,7 +499,9 @@
     state.number = json.ticket ? json.ticket.number : state.number;
     state.transcript = json.transcript || [];
     state.proposals = json.proposals || [];
+    state.runs = json.runs || [];
     state.turnsLeft = json.turns_left || 0;
+    marks(true);
   }
 
   function fail(err) {
@@ -458,6 +513,7 @@
     state.number = '';
     state.transcript = [];
     state.proposals = [];
+    state.runs = [];
     state.error = '';
     state.view = 'chat';
     render();
@@ -692,6 +748,84 @@
     launcher.focus();
   });
 
+  // ------------------------------------------------- marks outside the chat
+
+  // Tickets on the page with an open proposal of an AI agent, and pictures
+  // of AI agents' thread entries. Fetched when the set of tickets on the
+  // page changes; put back on every DOM change, since the board re-renders
+  // its cards.
+  var marked = { key: '', proposals: [], entries: {} };
+
+  function pageTickets() {
+    if (cfg.admin) return [];
+    var cards = document.querySelectorAll('.spb-board .spb-card[data-ticket-id]');
+    var ids = [];
+    if (cards.length) {
+      Array.prototype.forEach.call(cards, function (c) {
+        var id = parseInt(c.getAttribute('data-ticket-id'), 10);
+        if (id > 0 && ids.indexOf(id) < 0) ids.push(id);
+      });
+    }
+    var current = ticketOnPage();
+    if (current > 0 && ids.indexOf(current) < 0) ids.push(current);
+    return ids.slice(0, 300);
+  }
+
+  function marks(force) {
+    var ids = pageTickets();
+    var key = ids.join(',');
+    if (!force && key === marked.key) return paint();
+    marked.key = key;
+    if (!ids.length) {
+      marked.proposals = [];
+      marked.entries = {};
+      return paint();
+    }
+    request('GET', '/marks', { ids: key }).then(function (json) {
+      if (marked.key !== key) return;
+      marked.proposals = json.proposals || [];
+      marked.entries = json.entries || {};
+      paint();
+    }).catch(function () { /* marks are a hint; the chat shows the truth */ });
+  }
+
+  function paint() {
+    var waiting = t.proposal_waiting || '';
+    var current = ticketOnPage();
+    launcher.classList.toggle('spa-ai-launcher-dot', current > 0 && marked.proposals.indexOf(current) >= 0);
+    Array.prototype.forEach.call(document.querySelectorAll('.spb-board .spb-card[data-ticket-id]'), function (c) {
+      var on = marked.proposals.indexOf(parseInt(c.getAttribute('data-ticket-id'), 10)) >= 0;
+      var dot = c.querySelector(':scope > .spa-ai-card-dot');
+      if (on && !dot) {
+        dot = el('span', 'spa-ai-card-dot');
+        dot.title = waiting;
+        dot.setAttribute('aria-label', waiting);
+        c.appendChild(dot);
+      } else if (!on && dot) {
+        dot.remove();
+      }
+    });
+    Object.keys(marked.entries).forEach(function (entryId) {
+      var anchor = document.querySelector('a[name="entry-' + parseInt(entryId, 10) + '"]');
+      var entry = anchor && anchor.closest('.thread-entry');
+      var url = marked.entries[entryId];
+      if (!entry || !url || entry.getAttribute('data-spa-ai-img') === url) return;
+      entry.setAttribute('data-spa-ai-img', url);
+      var img = entry.querySelector(':scope > .avatar img');
+      if (img) {
+        img.removeAttribute('srcset');
+        img.src = url;
+        return;
+      }
+      var name = entry.querySelector('.header > b');
+      if (!name) return;
+      var small = el('img', 'spa-ai-entry-img');
+      small.alt = '';
+      small.src = url;
+      name.parentNode.insertBefore(small, name);
+    });
+  }
+
   // Ticket changes: PJAX navigation in the agent panel, cards in the board.
   var pending = 0;
   function watch() {
@@ -699,6 +833,7 @@
     pending = window.setTimeout(function () {
       pending = 0;
       place();
+      marks(false);
       if (state.open) sync();
     }, 150);
   }
@@ -710,5 +845,6 @@
 
   setLarge(stored('localStorage', LARGE_KEY) === '1');
   place();
+  marks(true);
   if (stored('sessionStorage', STORE_KEY) === '1') setOpen(true);
 })();

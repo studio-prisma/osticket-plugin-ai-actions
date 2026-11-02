@@ -306,14 +306,18 @@ final class AiActionsAutomation
             VALUES (0, 0, %d, 'admin', %s, %s, '[]', 0, 0, NOW())", self::logTable(), $staffId, self::quote($prompt), self::quote(json_encode($results))));
     }
 
-    /** Undo of an automatic run, by an admin, within UNDO_HOURS. */
-    public static function undo(int $id): bool
+    /**
+     * Undo of an automatic run within UNDO_HOURS: by an admin from the log,
+     * or ($ticketId set) from the ticket's chat by any agent who can open
+     * the ticket. Each step checks the undoing agent's own permissions.
+     */
+    public static function undo(int $id, ?int $ticketId = null): bool
     {
         global $thisstaff;
 
         self::ensure();
-        db_query(sprintf("UPDATE `%s` SET undone=1 WHERE id=%d AND mode IN ('auto','admin') AND undone=0 AND created > NOW() - INTERVAL %d HOUR",
-            self::logTable(), $id, self::UNDO_HOURS));
+        db_query(sprintf("UPDATE `%s` SET undone=1 WHERE id=%d AND mode IN ('auto','admin') AND undone=0 AND created > NOW() - INTERVAL %d HOUR%s",
+            self::logTable(), $id, self::UNDO_HOURS, $ticketId !== null ? sprintf(" AND mode='auto' AND ticket_id=%d", $ticketId) : ''));
         if (db_affected_rows() !== 1) {
             return false;
         }
@@ -355,19 +359,91 @@ final class AiActionsAutomation
         self::ensure();
         db_query(sprintf("UPDATE `%s` SET state='expired' WHERE state='open' AND created < NOW() - INTERVAL %d DAY",
             self::proposalTable(), self::PROPOSAL_DAYS));
-        $res = db_query(sprintf("SELECT p.id, p.answer, p.preview, p.rule_id, s.firstname, s.lastname FROM `%s` p
+        $res = db_query(sprintf("SELECT p.id, p.answer, p.preview, p.rule_id, p.agent_id, s.firstname, s.lastname FROM `%s` p
             LEFT JOIN `%s` s ON s.staff_id=p.agent_id WHERE p.ticket_id=%d AND p.state='open' ORDER BY p.id",
             self::proposalTable(), STAFF_TABLE, $ticketId));
         $out = array();
+        $images = AiActionsAgents::images();
         while ($res && ($r = db_fetch_array($res))) {
             $rule = AiActionsRules::get((int) $r['rule_id']);
             $out[] = array(
                 'id'      => (int) $r['id'],
                 'by'      => trim($r['firstname'] . ' ' . $r['lastname']),
+                'image'   => $images[(int) $r['agent_id']] ?? '',
                 'rule'    => $rule ? $rule['name'] : '',
                 'answer'  => (string) $r['answer'],
                 'changes' => (array) json_decode((string) $r['preview'], true),
             );
+        }
+        return $out;
+    }
+
+    /** Of these tickets, the ones with an open proposal. */
+    public static function withProposals(array $ticketIds): array
+    {
+        self::ensure();
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ticketIds))));
+        if (!$ids) {
+            return array();
+        }
+        $res = db_query(sprintf("SELECT DISTINCT ticket_id FROM `%s` WHERE state='open' AND created > NOW() - INTERVAL %d DAY AND ticket_id IN (%s)",
+            self::proposalTable(), self::PROPOSAL_DAYS, implode(',', $ids)));
+        $out = array();
+        while ($res && ($row = db_fetch_row($res))) {
+            $out[] = (int) $row[0];
+        }
+        return $out;
+    }
+
+    /**
+     * Automatic runs on a ticket that can still be undone, for its chat
+     * window: what changed, by which AI agent. The stored old values stay
+     * on the server.
+     */
+    public static function recentRuns(int $ticketId): array
+    {
+        self::ensure();
+        $res = db_query(sprintf("SELECT l.id, l.rule_id, l.agent_id, l.results, l.undone, l.created, s.firstname, s.lastname FROM `%s` l
+            LEFT JOIN `%s` s ON s.staff_id=l.agent_id WHERE l.ticket_id=%d AND l.mode='auto' AND l.created > NOW() - INTERVAL %d HOUR
+            ORDER BY l.id", self::logTable(), STAFF_TABLE, $ticketId, self::UNDO_HOURS));
+        $out = array();
+        $images = AiActionsAgents::images();
+        while ($res && ($r = db_fetch_array($res))) {
+            $rule = AiActionsRules::get((int) $r['rule_id']);
+            $changes = array();
+            $undoable = false;
+            foreach ((array) json_decode((string) $r['results'], true) as $x) {
+                $changes[] = array('label' => (string) ($x['label'] ?? ''), 'value' => (string) ($x['value'] ?? ''),
+                                   'ok' => !empty($x['ok']), 'error' => $x['error'] ?? null);
+                $undoable = $undoable || (!empty($x['ok']) && empty($x['unchanged']) && AiActionsTools::undoable((string) ($x['action'] ?? '')));
+            }
+            $out[] = array(
+                'id'       => (int) $r['id'],
+                'by'       => trim($r['firstname'] . ' ' . $r['lastname']),
+                'image'    => $images[(int) $r['agent_id']] ?? '',
+                'rule'     => $rule ? $rule['name'] : '',
+                'when'     => AiActionsTime::fromDb((string) $r['created'], AiActionsTime::dbZone(), AiActionsTime::zone($GLOBALS['thisstaff'] ?? null)) ?: (string) $r['created'],
+                'changes'  => $changes,
+                'undone'   => (bool) $r['undone'],
+                'undoable' => $undoable && !$r['undone'],
+            );
+        }
+        return $out;
+    }
+
+    /** Thread entries of AI agents with a picture on this ticket: entry ID => picture URL. */
+    public static function entryImages(int $ticketId): array
+    {
+        $images = AiActionsAgents::images();
+        if (!$images) {
+            return array();
+        }
+        $res = db_query(sprintf("SELECT e.id, e.staff_id FROM `%s` e JOIN `%s` t ON t.id=e.thread_id
+            WHERE t.object_type='T' AND t.object_id=%d AND e.staff_id IN (%s) ORDER BY e.id DESC LIMIT 200",
+            THREAD_ENTRY_TABLE, THREAD_TABLE, $ticketId, implode(',', array_map('intval', array_keys($images)))));
+        $out = array();
+        while ($res && ($row = db_fetch_row($res))) {
+            $out[(string) (int) $row[0]] = $images[(int) $row[1]];
         }
         return $out;
     }
