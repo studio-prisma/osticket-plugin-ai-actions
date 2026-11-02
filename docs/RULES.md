@@ -14,6 +14,7 @@ From 0.4.0 the assistant can also work on its own: as an **AI agent**, following
 - An AI agent is a normal osTicket agent: it appears in assignment lists and its role decides what it may do. Give it a role with only what it needs.
 - Nobody can sign in with it: it gets an authentication backend that doesn't exist, a random password nobody knows, and any session of it ends at once. Its address is `…@example.com`, so alerts to it go nowhere.
 - Pause an AI agent on the same tab; its rules stop with it.
+- A picture (https:// address or a path on this server) shows on its cards in the ticket chat and at its thread entries.
 
 ## Rules
 
@@ -25,11 +26,20 @@ From 0.4.0 the assistant can also work on its own: as an **AI agent**, following
 |---|---|
 | Trigger | new ticket · assigned to the AI agent · new customer message · schedule (every N minutes over open, overdue or stale tickets, at most 20 per run) |
 | Conditions | departments, help topics, priorities, statuses, sources, text contains (any of several words); empty = all |
-| Task | what the AI agent should do, in plain words. The model treats it as the request; ticket content stays data |
-| Allowed actions | note, priority, assignment, department, due date, status, sub-ticket, reply draft, send reply. The AI agent gets only these tools |
-| Mode | **Proposal**: the plan waits in the ticket's chat window; whoever opens the ticket runs it with their own rights or discards it. **Automatic**: it runs right away with the AI agent's role |
+| Task | what the AI agent should do, in plain words, up to 3000 characters. The model treats it as the request; ticket content stays data |
+| Allowed actions | note, priority, assignment, department, due date, help topic, parent ticket, status, sub-ticket, reply draft, send reply. The AI agent gets only these tools |
+| Mode | **Proposal**: the plan waits in the ticket's chat window, the bubble and the board card show a dot; whoever opens the ticket runs it with their own rights or discards it. **Automatic**: it runs right away with the AI agent's role |
 
 Rules run in the order given; "no further rules after this one" stops the chain. "Runs per ticket and day" caps a rule on one ticket.
+
+A ticket that is closed by the time the cron gets to it (for example by one of osTicket's ticket filters) is skipped without asking the model, unless the rule lists statuses among its conditions.
+
+### Follow-up and series (0.5.3)
+
+- **Help topic:** the AI agent can set the help topic. If the topic has an SLA plan, the ticket gets it and its due date follows from it, instead of a date the model picks.
+- **Parent ticket:** for duplicates and alert series, the AI agent can hang a ticket under an open ticket of the same customer. It first posts a note on that parent about what this ticket reports, so closing the child later loses nothing.
+- **Follow-up date:** a status such as "Follow-up" plus a due date as the date to look again; both are existing actions, the task says when to use them.
+- **Never closed automatically:** tickets with priority High or Emergency, whatever the task says.
 
 ## Automatic replies and the send guard
 
@@ -42,4 +52,4 @@ A reply an AI agent sends on its own goes out only if every check passes. Otherw
 
 ## Log and undo
 
-*Log* tab: every run with rule, AI agent, mode, result, send guard verdict and tokens. Automatic runs can be undone for 24 hours (sent replies can't). Every automatic run also leaves an internal note in the ticket.
+*Log* tab: every run with rule, AI agent, mode, result, send guard verdict and tokens. Automatic runs can be undone for 24 hours (sent replies can't), here and in the ticket's chat window, where any agent who can open the ticket sees the run and can undo it with their own permissions. Every automatic run leaves one internal note in the ticket: the AI agent's own note, if it wrote one, and the list of changes. osTicket's history of the ticket names the AI agent for these changes.

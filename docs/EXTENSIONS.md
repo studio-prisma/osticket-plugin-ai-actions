@@ -44,3 +44,7 @@ Signal::connect('ai-actions.tools', function ($registry) {
 - Names start with `x_`; at most 20 actions in total. Invalid registrations are skipped and logged as `ai-actions: extension tool skipped (name)`.
 - An exception in a callback counts as a rejected change; the log only gets the exception class.
 - Actions run after notes, drafts, sub-tickets and replies, before transfer and status.
+
+## Example in use
+
+The [Ticket Board](https://github.com/studio-prisma/osticket-plugin-board) (from 0.6.0) registers two actions this way, `x_board_release` and `x_board_answered`, in `src/BoardAiTools.php`. Both run through the board's own quick-view handler, so its permission checks apply to the agent who clicks **Run**. Rules can't use extension actions; they are offered in the chat only.

@@ -15,11 +15,11 @@ A chat in the osTicket agent panel that turns plain-language requests into ticke
 |---|---|
 | Where | A bubble in the bottom-right corner of the agent panel. The conversation belongs to the ticket that is open: the ticket view, or a card in the quick view of the [Ticket Board](https://github.com/studio-prisma/osticket-plugin-board) |
 | Questions | "What does the customer actually want?", "Summarise the thread". Answered from the ticket's facts and thread; nothing changes |
-| Changes | Due date, priority, assignment to an agent or team, department, status, internal note, reply draft, sub-ticket, sent reply (setting, off by default), actions of other plugins ([EXTENSIONS](docs/EXTENSIONS.md)) |
+| Changes | Due date, priority, help topic (with its SLA), assignment to an agent or team, department, status, parent ticket, internal note, reply draft, sub-ticket, sent reply (setting, off by default), actions of other plugins ([EXTENSIONS](docs/EXTENSIONS.md)) |
 | Reading | Parent ticket and sub-tickets the agent may open; attachments (text files; PDFs and images with Claude) |
 | Providers | Anthropic (Claude Sonnet 5.5, Opus 5.5), OpenAI (GPT-6.1 Sol, Terra), Mistral (Large, Medium; EU) |
-| Settings | For admins on admin pages: canned responses, help topics, lists, SLA, filters, departments, teams, with before → after and undo; never deletes ([ADMIN](docs/ADMIN.md)) |
-| AI agents and rules | Agent accounts without login that work by rules: triage on new tickets, help when assigned, replies to customer messages, scheduled follow-ups. As proposals or automatic, with a send guard for replies ([RULES](docs/RULES.md)) |
+| Settings | For admins on admin pages: canned responses, help topics, lists, SLA, filters (including reject and email), departments and department access, teams, with before → after and undo; never deletes ([ADMIN](docs/ADMIN.md)) |
+| AI agents and rules | Agent accounts without login that work by rules: triage on new tickets, help when assigned, replies to customer messages, scheduled follow-ups. As proposals (with a dot on bubble and board card) or automatic (undo from the ticket chat for 24 hours), with a send guard for replies ([RULES](docs/RULES.md)) |
 | Preview | Every planned change as a line with osTicket's own labels, notes and drafts with their full text. **Run** or **Discard** |
 | Undo | 30 seconds after a run, for every field change (not for notes, drafts and sub-tickets). Afterwards the button stays, greyed out |
 | Refresh | After a run or an undo the ticket view reloads, on the board the quick view reopens with the new values |
