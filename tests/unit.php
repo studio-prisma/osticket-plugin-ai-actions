@@ -878,9 +878,33 @@ check('admin: filter actions only of the known kinds, IDs that exist, each kind 
     AiActionsAdminTools::actions("dept 1\npri 2", $exists) === array('dept' => 1, 'pri' => 2)
     && AiActionsAdminTools::actions('reject 1', $exists) === null && AiActionsAdminTools::actions('email 1', $exists) === null
     && AiActionsAdminTools::actions("dept 1\ndept 2", $exists) === null && AiActionsAdminTools::actions('dept 99', $exists) === null);
-check('admin: departments are only changed, never created', AiActionsAdminTools::validate('save_department',
-    array('id' => '', 'name' => 'New', 'manager' => '', 'sla' => '', 'public' => ''), $exists) === null
+check('admin: a new department needs a name; existing ones can be changed', AiActionsAdminTools::validate('save_department',
+    array('id' => '', 'name' => '', 'manager' => '', 'sla' => '', 'public' => ''), $exists) === null
+    && AiActionsAdminTools::validate('save_department', array('id' => '', 'name' => 'New', 'manager' => '', 'sla' => '', 'public' => ''), $exists) !== null
     && AiActionsAdminTools::validate('save_department', array('id' => '1', 'name' => 'Renamed', 'manager' => '0', 'sla' => '', 'public' => 'no'), $exists) !== null);
+check('admin: "reject" is a filter action without an ID, once',
+    AiActionsAdminTools::actions("reject\ndept 1", $exists) === array('reject' => 0, 'dept' => 1)
+    && AiActionsAdminTools::actions("reject\nreject", $exists) === null);
+check('admin: department access needs department, agent, a role to give, none to take',
+    AiActionsAdminTools::validate('dept_member', array('id' => '', 'department' => '1', 'agent' => '2', 'role' => '3', 'member' => 'yes'), $exists) !== null
+    && AiActionsAdminTools::validate('dept_member', array('id' => '', 'department' => '1', 'agent' => '2', 'role' => '', 'member' => 'yes'), $exists) === null
+    && AiActionsAdminTools::validate('dept_member', array('id' => '', 'department' => '1', 'agent' => '2', 'role' => '', 'member' => 'no'), $exists) !== null
+    && AiActionsAdminTools::validate('dept_member', array('id' => '', 'department' => '1', 'agent' => '2', 'role' => '3', 'member' => 'no'), $exists) === null
+    && AiActionsAdminTools::validate('dept_member', array('id' => '', 'department' => '99', 'agent' => '2', 'role' => '3', 'member' => 'yes'), $exists) === null
+    && AiActionsAdminTools::validate('dept_member', array('id' => '1', 'department' => '1', 'agent' => '2', 'role' => '3', 'member' => 'yes'), $exists) === null);
+$mail = array('id' => '1', 'recipients' => 'Team@Example.com; ops@example.com', 'subject' => 'New alert', 'message' => "Hello\nthere", 'active' => 'yes');
+check('admin: filter email to fixed addresses, normalised',
+    (AiActionsAdminTools::validate('filter_email', $mail, $exists)['recipients'] ?? '') === 'team@example.com, ops@example.com');
+check('admin: filter email refuses variables, names, too many addresses, empty parts',
+    AiActionsAdminTools::validate('filter_email', array('recipients' => '%{user}') + $mail, $exists) === null
+    && AiActionsAdminTools::validate('filter_email', array('recipients' => 'Eve <eve@example.com>') + $mail, $exists) === null
+    && AiActionsAdminTools::validate('filter_email', array('recipients' => 'a@example.com,b@example.com,c@example.com,d@example.com,e@example.com,f@example.com') + $mail, $exists) === null
+    && AiActionsAdminTools::validate('filter_email', array('subject' => '') + $mail, $exists) === null
+    && AiActionsAdminTools::validate('filter_email', array('id' => '') + $mail, $exists) === null
+    && AiActionsAdminTools::validate('filter_email', array('id' => '99') + $mail, $exists) === null);
+check('admin: removing a filter email takes nothing else',
+    AiActionsAdminTools::validate('filter_email', array('id' => '1', 'recipients' => '', 'subject' => '', 'message' => '', 'active' => 'no'), $exists) !== null
+    && AiActionsAdminTools::validate('filter_email', array('active' => 'no') + $mail, $exists) === null);
 check('admin: team membership needs team, agent and yes/no', AiActionsAdminTools::validate('team_member',
     array('id' => '', 'team' => '1', 'agent' => '2', 'member' => 'yes'), $exists) !== null
     && AiActionsAdminTools::validate('team_member', array('id' => '', 'team' => '1', 'agent' => '2', 'member' => ''), $exists) === null);

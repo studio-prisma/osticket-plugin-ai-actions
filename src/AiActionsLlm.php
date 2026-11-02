@@ -68,6 +68,8 @@ final class AiActionsFakeLlm implements AiActionsLlm
         } elseif (strpos($req, 'create filter') !== false) {
             $call = array('save_filter', array('id' => '', 'name' => 'AI supplier filter', 'enabled' => '', 'target' => 'Any', 'match' => 'all',
                 'rules' => 'email contains @lieferant.example.com', 'actions' => 'dept ' . $first('Departments \\(id: name\\)')));
+        } elseif (strpos($req, 'create department') !== false) {
+            $call = array('save_department', array('id' => '', 'name' => 'AI Created Dept', 'manager' => '', 'sla' => '', 'public' => 'no'));
         } elseif (strpos($req, 'rename department') !== false) {
             $call = array('save_department', array('id' => $first('Department details'), 'name' => 'Renamed Dept', 'manager' => '', 'sla' => '', 'public' => ''));
         } elseif (strpos($req, 'add to team') !== false && preg_match('/Teams[^\n]*\n- (\d+):/', $all, $tm) && preg_match('/Agents[^\n]*\n(?:- \d+:[^\n]*\n)*?- (\d+): Philipp/', $all, $ag)) {
