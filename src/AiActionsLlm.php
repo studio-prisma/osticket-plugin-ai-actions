@@ -155,6 +155,14 @@ final class AiActionsFakeLlm implements AiActionsLlm
             array('/\bsales\b/iu', 'transfer', 'department', '/^Sales/i'),
             array('/\b(topic|thema)\b/iu', 'set_topic', 'topic', '/./'),
         );
+        // Board actions (Ticket Board plugin), when it registered them.
+        $names = array_column($tools, 'name');
+        if (preg_match('/\brelease\b/iu', $prompt) && in_array('x_board_release', $names, true)) {
+            $calls[] = array('x_board_release', array('confirm' => 'yes'));
+        }
+        if (preg_match('/\bmark answered\b/iu', $prompt) && in_array('x_board_answered', $names, true)) {
+            $calls[] = array('x_board_answered', array('mark' => 'answered'));
+        }
         if (preg_match('/\b(parent|leitticket)\b/iu', $prompt) && ($value = self::option($options, 'link_parent', '/./')) !== null) {
             $calls[] = array('link_parent', array('parent' => $value, 'note' => 'Fake: same alert, site a.example.'));
         }
