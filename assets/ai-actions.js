@@ -719,8 +719,10 @@
     var drawer = boardDrawer();
     var right = narrow() ? 12 : 20;
     if (drawer && !narrow()) {
-      var r = drawer.getBoundingClientRect();
-      if (r.width > 0 && r.left > 0) right = Math.round(window.innerWidth - r.left) + 16;
+      // The drawer slides in from the right edge; its width is where it ends
+      // up, while getBoundingClientRect() would catch it halfway in.
+      var w = drawer.offsetWidth;
+      if (w > 0 && w < document.documentElement.clientWidth) right = w + 16;
     }
     launcher.style.right = right + 'px';
     panel.style.right = panel.classList.contains('spa-ai-large') || narrow() ? '' : right + 'px';

@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Setting the status a ticket already has counts as unchanged instead of failed.
 - The log shows refused changes with their label and what the model asked for, instead of an empty "set_status:".
 - The help topic field asked osTicket for the signed-in agent, who doesn't exist in the cron.
+- On the Ticket Board the chat window could overlap the quick view by a few pixels: it measured the drawer while it was still sliding in.
 
 ### Security
 
