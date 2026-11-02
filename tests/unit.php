@@ -792,6 +792,16 @@ check('rules: conditions match', AiActionsRules::matches($rule, $facts)
     && AiActionsRules::matches(AiActionsRules::normalise(array()), $facts));
 check('rules: source condition', AiActionsRules::matches(AiActionsRules::normalise(array('sources' => array('email'))), $facts)
     && !AiActionsRules::matches(AiActionsRules::normalise(array('sources' => array('web'))), $facts));
+$moodle = AiActionsRules::normalise(array('contains' => 'Aktualisierungen für Moodle', 'sender' => ' moodle@acme.example , @other.example '));
+$mail = array('text' => 'Aktualisierungen für Moodle sind verfügbar', 'sender' => 'Moodle@ACME.example') + $facts;
+check('rules: sender condition, any of several, case ignored, and together with text', AiActionsRules::matches($moodle, $mail)
+    && AiActionsRules::matches($moodle, array('sender' => 'bot@other.example') + $mail)
+    && !AiActionsRules::matches($moodle, array('sender' => 'alice@acme.example') + $mail)
+    && !AiActionsRules::matches($moodle, array('text' => 'Frage zu Moodle') + $mail)
+    && !AiActionsRules::matches($moodle, array('sender' => '') + $mail)
+    && AiActionsRules::matches(AiActionsRules::normalise(array()), $mail) && AiActionsRules::matches($rule, $facts));
+check('rules: sender condition cleaned and shown in the flow', AiActionsRules::normalise(array('sender' => "a<b>@x.example\n"))['sender'] === 'a b @x.example'
+    && strpos(AiActionsRules::flow($moodle + array('name' => 'x'), array()), 'sender contains &quot;moodle@acme.example') !== false);
 $flow = AiActionsRules::flow($rule + array('name' => 'x'), array(array('staff_id' => 7, 'name' => 'Prisma <b>')));
 check('rules: flow view has five escaped boxes', substr_count($flow, '<span>') === 5 && strpos($flow, 'Prisma &lt;b&gt;') !== false
     && strpos($flow, 'runs automatically') !== false);

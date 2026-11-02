@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-02
+
+### Added
+
+- Rule condition *Sender contains*: the email address of whoever wrote the latest customer message, the ticket's owner before there is one. Several entries separated by commas, any one matches; a whole address or a part such as `@example.com`. Like every condition it must match together with the others, so "text contains X from sender Y" fits in one rule, e.g. for system mails that should be filed without asking ([RULES](docs/RULES.md)).
+
 ## [0.5.5] - 2026-11-02
 
 ### Security
@@ -159,7 +165,8 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.2...v0.5.3
