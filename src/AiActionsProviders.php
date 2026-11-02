@@ -98,6 +98,9 @@ final class AiActionsHttp
     {
         $out = array();
         foreach ($tools as $t) {
+            if (isset($t['type'])) {
+                continue; // a Claude server tool (web_fetch), nothing to call here
+            }
             $out[] = array(
                 'name'        => (string) $t['name'],
                 'description' => (string) ($t['description'] ?? ''),
@@ -174,10 +177,10 @@ final class AiActionsOpenAi implements AiActionsLlm
             'include'           => array('reasoning.encrypted_content'),
             'max_output_tokens' => self::MAX_TOKENS,
         );
-        if ($tools) {
+        if ($functions = AiActionsHttp::functions($tools)) {
             $body['tools'] = array_map(static function ($f) {
                 return array('type' => 'function') + $f + array('strict' => false);
-            }, AiActionsHttp::functions($tools));
+            }, $functions);
         }
         return $body;
     }
@@ -304,10 +307,10 @@ final class AiActionsMistral implements AiActionsLlm
             'messages'   => self::messages($system, $messages),
             'max_tokens' => self::MAX_TOKENS,
         );
-        if ($tools) {
+        if ($functions = AiActionsHttp::functions($tools)) {
             $body['tools'] = array_map(static function ($f) {
                 return array('type' => 'function', 'function' => $f);
-            }, AiActionsHttp::functions($tools));
+            }, $functions);
             $body['tool_choice'] = 'auto';
         }
         return $body;

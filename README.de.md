@@ -16,7 +16,7 @@ Ein Chat im Agenten-Bereich von osTicket, der Anfragen in Alltagssprache über d
 | Wo | Eine Bubble unten rechts im Agenten-Bereich. Das Gespräch gehört zum offenen Ticket: Ticketansicht oder eine Karte in der Schnellansicht des [Ticket Boards](https://github.com/studio-prisma/osticket-plugin-board) |
 | Fragen | „Was will die Kundin eigentlich?“, „Fasse den Verlauf zusammen“. Beantwortet aus Ticketdaten und Verlauf, es ändert sich nichts |
 | Änderungen | Fälligkeit, Priorität, Hilfethema (mit seinem SLA), Zuweisung an Agent oder Team, Abteilung, Status, Leitticket, interne Notiz, Antwortentwurf, Unter-Ticket, gesendete Antwort (Einstellung, Standard aus), Aktionen anderer Plugins ([EXTENSIONS](docs/EXTENSIONS.md)) |
-| Lesen | Eltern-Ticket und Unter-Tickets, die der Agent öffnen darf; Anhänge (Textdateien; PDFs und Bilder mit Claude) |
+| Lesen | Eltern-Ticket und Unter-Tickets, die der Agent öffnen darf; Anhänge (Textdateien; PDFs und Bilder mit Claude); verlinkte Seiten auf Domains, die der Admin freigibt (nur Claude) |
 | Anbieter | Anthropic (Claude Sonnet 5.5, Opus 5.5), OpenAI (GPT-6.1 Sol, Terra), Mistral (Large, Medium; EU) |
 | Verwaltung | Für Admins auf den Admin-Seiten: Textbausteine, Hilfethemen, Listen, SLA, Filter (auch Ablehnen und E-Mail), Abteilungen und Abteilungszugriff, Teams, mit Vorher → Nachher und Undo; löscht nie ([ADMIN](docs/ADMIN.md)) |
 | KI-Agenten und Regeln | Agenten-Konten ohne Login, die nach Regeln arbeiten: Triage bei neuen Tickets, Hilfe bei Zuweisung, Antworten auf Kundennachrichten, Nachfassen nach Zeitplan. Als Vorschlag (mit Punkt an Blase und Board-Karte) oder automatisch (24 Stunden rückgängig aus dem Ticket-Chat), mit Sendeschutz für Antworten ([RULES](docs/RULES.md)) |
@@ -80,6 +80,7 @@ Kurzfassung:
 | Allow sending replies | aus | Die AI darf eine E-Mail-Antwort planen; gesendet erst nach Ausführen, nicht rückgängig zu machen |
 | Model | Claude Sonnet 5.5 | Auch Claude Opus 5.5, GPT-6.1 Sol/Terra, Mistral Large/Medium. Das Modell bestimmt den Anbieter; der Key muss von diesem Anbieter sein (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`) |
 | Effort | Low | Wie lange das Modell nachdenkt. Low reicht für die meisten Anfragen |
+| Pages the assistant may read | leer | Nur Claude. Domains, deren Seiten der Assistent aus Links im Ticket öffnen darf, z. B. Sicherheitshinweise eines Herstellers. Die Seite ruft Anthropic ab (höchstens 3 pro Anfrage), nicht dein Server. Leer = aus |
 | Messages | 100 | Pro Agent und Tag, 0 = kein Limit |
 | Tokens | 500.000 | Input plus Output pro Agent und Tag, 0 = kein Limit |
 | Thread length | 12.000 | Zeichen des Verlaufs, die das Modell liest, neueste zuerst (2.000 bis 50.000) |

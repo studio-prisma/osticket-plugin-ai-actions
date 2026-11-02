@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Rule condition *Sender contains*: the email address of whoever wrote the latest customer message, the ticket's owner before there is one. Several entries separated by commas, any one matches; a whole address or a part such as `@example.com`. Like every condition it must match together with the others, so "text contains X from sender Y" fits in one rule, e.g. for system mails that should be filed without asking ([RULES](docs/RULES.md)).
+- **Pages the assistant may read** (new setting, empty = off): with a Claude model, the assistant may open links from the ticket that point to the listed domains, such as a vendor's security advisory, through Anthropic's server-side `web_fetch` tool. The fetch runs at Anthropic, never from the help desk server; at most 3 pages per request and 8,000 tokens per page. Fetched pages count as ticket data, never as instructions. OpenAI and Mistral models keep working without it.
+
+### Fixed
+
+- The model saw no link targets: thread entries were read through osTicket's search text, which drops every `href`. Alert mails often name the affected site or the fix only in a link. Entries now keep their links as "text (URL)"; Microsoft 365 Safe Links wrappers are unwrapped to the real target, and links over 500 characters, `javascript:` and `data:` links are left out.
 
 ## [0.5.5] - 2026-11-02
 

@@ -34,6 +34,7 @@ Expected response: an acknowledgement within 7 days, an assessment within 30. Th
 - **Ticket content leaking to the wrong place**: another ticket's data in the model's context, an internal note in a reply draft without the agent's request, conversation history in another agent's chat.
 - **The API key** in a response, a log line, a prompt, an error message, the release package, or in clear text in the database; a key file inside the osTicket directory being accepted; content of a file that isn't a key being sent anywhere.
 - **A reply sent without the agent's click on Run**, while "Allow sending replies" is off, or to anyone but the ticket owner and its active collaborators.
+- **A page fetched outside "Pages the assistant may read"**, a fetch from the help desk server itself, or a fetched page that makes the plugin change, send or leak anything past the preview and the rules that apply to ticket content.
 - **Reading another ticket or a file through the read tools** that isn't the parent, a sub-ticket or an attachment of the open ticket, or that the agent can't open.
 - **Model or plugin output rendered as markup** in the chat, the preview, notes or drafts.
 - **Path traversal or arbitrary file reads** through the asset route or the key file setting.
@@ -51,6 +52,7 @@ Documented design decisions are not findings.
 - **Actions added by other plugins** through `ai-actions.tools` run that plugin's code with the agent; their permission checks are that plugin's responsibility.
 - **The reviewer model can be wrong.** It is the last of several layers; a reply it lets through that breaks none of the fixed checks is a quality issue, not a vulnerability. Automatic sending is the operator's choice per rule.
 - **The model can be wrong, or be talked into a plan.** A bad suggestion that the agent sees in the preview and could reject is not a vulnerability; the preview and the confirmation are the control. A plan the agent confirms runs with the agent's rights.
+- **Fetched pages go to the model**, like ticket content. The admin chooses the domains; a page on an allowed domain that misleads the model is the same case as a misleading ticket.
 - **Prompt injection that only changes the model's answer text** (a misleading summary) without a change, a leak or a hidden preview.
 - **Closing after an assignment in the same plan keeps the new assignee**, unlike osTicket's own close.
 - **Undo of the due date writes the old value directly**, bypassing the edit form's "must be in the future" check.
