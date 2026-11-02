@@ -12,7 +12,7 @@ From 0.4.0 the assistant can also work on its own: as an **AI agent**, following
 *AI agents* tab → name, department, role, optionally a model and a short persona.
 
 - An AI agent is a normal osTicket agent: it appears in assignment lists and its role decides what it may do. Give it a role with only what it needs.
-- Nobody can sign in with it: it gets an authentication backend that doesn't exist, a random password nobody knows, and any session of it ends at once.
+- Nobody can sign in with it: it gets an authentication backend that doesn't exist, a random password nobody knows, and any session of it ends at once. Editing it under Admin → Agents is fine: the plugin puts backend and password back after each save there.
 - **Email address.** osTicket alerts an AI agent like any agent (new ticket in its department, assignment, …), and every agent needs an address. Without one given, it gets `…@example.com`. That is fine without SMTP. With SMTP the mail server refuses that domain, and osTicket 1.18 then fails every further mail of the same run, alerts to people included (system log: "Cannot issue HELO to existing session"). So with SMTP, set an address in the *Email (alerts)* column that your mail server accepts:
   - a team mailbox osTicket doesn't fetch, or an empty distribution list if nobody needs the alerts;
   - for several AI agents on one mailbox, plus addresses (`team+triage@…`), if your mail server supports them; osTicket wants a different address per agent.
