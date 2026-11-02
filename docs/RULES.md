@@ -31,7 +31,7 @@ From 0.4.0 the assistant can also work on its own: as an **AI agent**, following
 | Part | Choices |
 |---|---|
 | Trigger | new ticket · assigned to the AI agent · new customer message · schedule (every N minutes over open, overdue or stale tickets, at most 20 per run) |
-| Conditions | departments, help topics, priorities, statuses, sources, text contains (any of several words); empty = all |
+| Conditions | departments, help topics, priorities, statuses, sources, text contains (subject or latest customer message, any of several words), sender contains (address of whoever wrote the latest customer message, e.g. `noreply@example.com` or `@example.com`, any of several); empty = all, filled ones must all match |
 | Task | what the AI agent should do, in plain words, up to 3000 characters. The model treats it as the request; ticket content stays data |
 | Allowed actions | note, priority, assignment, department, due date, help topic, parent ticket, status, sub-ticket, reply draft, send reply. The AI agent gets only these tools |
 | Mode | **Proposal**: the plan waits in the ticket's chat window, the bubble and the board card show a dot; whoever opens the ticket runs it with their own rights or discards it. **Automatic**: it runs right away with the AI agent's role |
