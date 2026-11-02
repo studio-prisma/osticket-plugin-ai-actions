@@ -102,6 +102,11 @@ final class AiActionsAutomation
         if (!AiActionsRules::matches($rule, AiActionsRules::facts($ticket))) {
             return array('ok' => true, 'error' => 'no_match');
         }
+        // Closed since the trigger, e.g. by a ticket filter: no model call.
+        if (self::skipClosed($rule, (bool) $ticket->isOpen())) {
+            self::log($rule, $ticket, $agent, 'skip', 'closed', array(), array(), false, 0);
+            return array('ok' => true, 'error' => 'closed');
+        }
         if (self::runsToday((int) $rule['id'], (int) $ticket->getId()) >= $rule['per_day']) {
             return array('ok' => true, 'error' => 'per_day');
         }
@@ -125,6 +130,15 @@ final class AiActionsAutomation
         return array('ok' => true);
     }
 
+    /**
+     * A closed ticket is left alone unless the rule asks for statuses
+     * itself (then matches() has decided). Public for the unit tests.
+     */
+    public static function skipClosed(array $rule, bool $open): bool
+    {
+        return !$open && !$rule['statuses'];
+    }
+
     private static function propose(array $rule, $ticket, $agent, array $plan): void
     {
         // A newer proposal of the same rule replaces an open one.
@@ -144,14 +158,26 @@ final class AiActionsAutomation
         $guard = array();
         $sent = false;
         $assigned = false;
+        $notes = array();
+        $since = self::lastEvent($ticket);
         AiActionsExtensions::bind($ticket, $agent);
         foreach ($plan['changes'] as $c) {
             $choices = AiActionsChoices::forTicket($ticket, $agent, in_array('send_reply', $rule['actions'], true));
             $input = AiActionsTools::validate($c['action'], $c['input'], $choices);
+            $same = $input === null ? AiActionsExecutor::sameStatus($ticket, $c['action'], $c['input']) : null;
             $line = $input !== null ? AiActionsTools::summary($c['action'], $input, $t, $choices)
-                : array('label' => $c['action'], 'value' => '');
-            if ($input === null) {
+                : ($same ? array('label' => $t['labels']['set_status'], 'value' => $same['value'])
+                         : AiActionsTools::rejectedLine($c['action'], $c['input'], $t));
+            if ($same) {
+                $r = $same;
+            } elseif ($input === null) {
                 $r = array('ok' => false, 'error' => 'rejected');
+            } elseif ($c['action'] === 'add_internal_note') {
+                // Becomes part of the run's one note below.
+                $notes[] = $input['text'];
+                $r = array('ok' => true);
+            } elseif ($c['action'] === 'set_status' && self::urgentClose($ticket, $input['status'])) {
+                $r = array('ok' => false, 'error' => 'urgent');
             } elseif ($c['action'] === 'send_reply') {
                 $text = self::withDisclosure($input['text']);
                 $guard = AiActionsGuard::check($ticket, $input['text'], $rule, AiActionsController::reviewer());
@@ -179,9 +205,79 @@ final class AiActionsAutomation
         $errors = array();
         $ticket->postNote(array(
             'title' => sprintf('AI action (automatic, %s, rule "%s")', (string) $agent->getName(), $rule['name']),
-            'note'  => new TextThreadEntryBody(AiActionsController::noteBody($rule['task'], AiActionsController::publicResults($results), $t)),
+            'note'  => new TextThreadEntryBody(self::runNote($notes, $results, $t)),
         ), $errors, $agent);
+        self::attribute($ticket, $since, $agent);
         self::log($rule, $ticket, $agent, 'auto', $plan['answer'], $results, $guard, $sent, $plan['tokens']);
+    }
+
+    /**
+     * The one note of an automatic run: what the AI agent noted, then the
+     * other changes. The note's own line is not repeated. Public for the
+     * unit tests.
+     */
+    public static function runNote(array $notes, array $results, array $t): string
+    {
+        $lines = array();
+        foreach ($results as $r) {
+            if (($r['action'] ?? '') === 'add_internal_note' && !empty($r['ok'])) {
+                continue;
+            }
+            $state = $r['ok'] ? $t['note_ok'] : ($t['failed'] . ' (' . ($t['errors'][$r['error'] ?? ''] ?? $r['error'] ?? '') . ')');
+            $lines[] = sprintf('- %s: %s (%s)', $r['label'], $r['value'], $state);
+        }
+        $parts = array_values(array_filter(array_map('trim', $notes), 'strlen'));
+        if ($lines) {
+            $parts[] = $t['note_changes'] . ":\n" . implode("\n", $lines);
+        }
+        return $parts ? implode("\n\n", $parts) : $t['note_changes'] . ': –';
+    }
+
+    /** Closing a ticket that is High or Emergency (urgency 1–2) is left to a person. */
+    private static function urgentClose($ticket, string $statusId): bool
+    {
+        $status = TicketStatus::lookup((int) $statusId);
+        $prio = $ticket->getPriority();
+        return self::isUrgentClose($status ? strtolower((string) $status->getState()) : '',
+            $prio && method_exists($prio, 'getUrgency') ? (int) $prio->getUrgency() : 0);
+    }
+
+    /** Public for the unit tests. */
+    public static function isUrgentClose(string $state, int $urgency): bool
+    {
+        return $state === 'closed' && $urgency >= 1 && $urgency <= 2;
+    }
+
+    private static function eventTable(): string
+    {
+        return defined('THREAD_EVENT_TABLE') ? THREAD_EVENT_TABLE : TABLE_PREFIX . 'thread_event';
+    }
+
+    private static function lastEvent($ticket): int
+    {
+        $thread = $ticket->getThread();
+        if (!$thread) {
+            return 0;
+        }
+        $res = db_query(sprintf('SELECT MAX(id) FROM `%s` WHERE thread_id=%d', self::eventTable(), (int) $thread->getId()));
+        $row = $res ? db_fetch_row($res) : null;
+        return $row ? (int) $row[0] : 0;
+    }
+
+    /**
+     * The cron runs without a signed-in agent, so osTicket writes "SYSTEM"
+     * into the events of this run. They were the AI agent's doing.
+     * Setting $thisstaff instead would also make the AI agent the closing
+     * agent and the referral target, so the events are put right afterwards.
+     */
+    private static function attribute($ticket, int $since, $agent): void
+    {
+        $thread = $ticket->getThread();
+        if (!$thread) {
+            return;
+        }
+        db_query(sprintf("UPDATE `%s` SET username=%s, uid=%d, uid_type='S' WHERE thread_id=%d AND id>%d AND username='SYSTEM'",
+            self::eventTable(), self::quote((string) $agent->getUserName()), (int) $agent->getId(), (int) $thread->getId(), $since));
     }
 
     /** The AI notice under automatic replies, if switched on. Public for the unit tests. */
@@ -303,10 +399,12 @@ final class AiActionsAutomation
         foreach ((array) json_decode((string) ($row['changes'] ?? '[]'), true) as $c) {
             $choices = AiActionsChoices::forTicket($ticket, $staff);
             $input = AiActionsTools::validate((string) ($c['action'] ?? ''), $c['input'] ?? null, $choices);
+            $same = $input === null ? AiActionsExecutor::sameStatus($ticket, (string) ($c['action'] ?? ''), $c['input'] ?? null) : null;
             $line = $input !== null ? AiActionsTools::summary($c['action'], $input, $t, $choices)
-                : array('label' => $t['labels'][$c['action'] ?? ''] ?? (string) ($c['action'] ?? ''), 'value' => '');
+                : ($same ? array('label' => $t['labels']['set_status'], 'value' => $same['value'])
+                         : AiActionsTools::rejectedLine((string) ($c['action'] ?? ''), $c['input'] ?? null, $t));
             $r = $input !== null ? AiActionsExecutor::run($ticket, $staff, $c['action'], $input, $assigned)
-                : array('ok' => false, 'error' => 'rejected');
+                : ($same ?: array('ok' => false, 'error' => 'rejected'));
             $assigned = $assigned || ($r['ok'] && in_array($c['action'], array('assign_agent', 'assign_team'), true));
             $results[] = $line + array('ok' => $r['ok'], 'error' => $r['error'] ?? null);
             $ticket = Ticket::lookup($ticket->getId());
@@ -336,7 +434,12 @@ final class AiActionsAutomation
             $rule = AiActionsRules::get((int) $r['rule_id']);
             $parts = array();
             foreach ((array) json_decode((string) $r['results'], true) as $x) {
-                $parts[] = sprintf('%s %s: %s', $r['mode'] === 'propose' ? '•' : (!empty($x['ok']) ? '✓' : '✕'), $x['label'] ?? '', mb_substr((string) ($x['value'] ?? ''), 0, 80));
+                $why = empty($x['ok']) && !empty($x['error']) && $r['mode'] !== 'propose' ? ' (' . (string) $x['error'] . ')' : '';
+                $parts[] = sprintf('%s %s: %s%s', $r['mode'] === 'propose' ? '•' : (!empty($x['ok']) ? '✓' : '✕'), $x['label'] ?? '',
+                    mb_substr((string) ($x['value'] ?? ''), 0, 80), $why);
+            }
+            if ($r['mode'] === 'skip') {
+                $parts[] = '– skipped: ticket ' . (string) $r['answer'];
             }
             $guard = (array) json_decode((string) $r['guard'], true);
             $undo = in_array($r['mode'], array('auto', 'admin'), true) && !$r['undone'] && strtotime($r['created']) > time() - self::UNDO_HOURS * 3600

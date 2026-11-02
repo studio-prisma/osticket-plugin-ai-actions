@@ -13,13 +13,17 @@ declare(strict_types=1);
 final class AiActionsTools
 {
     /**
-     * Tools that change the ticket, in the order they run: fields first,
-     * then notes, drafts and sub-tickets, status last (a closed ticket can't
-     * be assigned any more), transfer just before it (it can take away the
-     * agent's access).
+     * Tools that change the ticket, in the order they run: fields first
+     * (the help topic before the due date, since its SLA recomputes the due
+     * date), then notes, drafts and sub-tickets, the parent link, status last
+     * (a closed ticket can't be assigned any more), transfer just before it
+     * (it can take away the agent's access).
      */
-    public const WRITE = array('set_due_date', 'set_priority', 'assign_agent', 'assign_team',
-        'add_internal_note', 'draft_reply', 'create_subticket', 'send_reply', 'transfer', 'set_status');
+    public const WRITE = array('set_topic', 'set_due_date', 'set_priority', 'assign_agent', 'assign_team',
+        'add_internal_note', 'draft_reply', 'create_subticket', 'send_reply', 'link_parent', 'transfer', 'set_status');
+
+    /** link_parent: what the note on the parent ticket says about this one. */
+    public const PARENT_NOTE_MAX = 1000;
 
     /** Changes undo can't take back (spec: notes, drafts, sub-tickets, sent mail). */
     public const NO_UNDO = array('add_internal_note', 'draft_reply', 'create_subticket', 'send_reply');
@@ -39,10 +43,14 @@ final class AiActionsTools
         'assign_team'  => 'team',
         'transfer'     => 'department',
         'set_status'   => 'status',
+        'set_topic'    => 'topic',
+        'link_parent'  => 'parent',
     );
 
     /** Format of each choice value, checked before the list lookup. */
     private const CHOICE_FORMAT = array(
+        'set_topic'    => '/^[1-9]\d{0,9}$/',
+        'link_parent'  => '/^[1-9]\d{0,9}$/',
         'set_priority' => '/^[1-9]\d{0,9}$/',
         'assign_agent' => '/^s[1-9]\d{0,9}$/',
         'assign_team'  => '/^t[1-9]\d{0,9}$/',
@@ -129,6 +137,26 @@ final class AiActionsTools
             $choice('assign_team', 'team', 'assign the ticket to a team'),
             $choice('transfer', 'department', 'transfer the ticket to another department'),
             $choice('set_status', 'status', 'change the ticket\'s status, e.g. to close or resolve it'),
+            $choice('set_topic', 'topic', 'change the ticket\'s help topic. If the topic has an SLA plan, '
+                . 'it applies and the SLA due date follows from it'),
+            array(
+                'name'         => 'link_parent',
+                'description'  => 'Plan to make this ticket a sub-ticket of an open ticket of the same customer '
+                                . '(a lead ticket of a series, e.g. for duplicates or repeated alerts). Use a value listed '
+                                . 'under "link_parent:" in <ticket_options>. The note is posted on the lead ticket first, so '
+                                . 'what this ticket reports stays documented there. The change only happens after the agent confirms it.',
+                'strict'       => true,
+                'input_schema' => array(
+                    'type'                 => 'object',
+                    'properties'           => array(
+                        'parent' => array('type' => 'string', 'description' => 'Value from <ticket_options> "link_parent:".'),
+                        'note'   => array('type' => 'string', 'description' => 'For the lead ticket, plain text up to '
+                            . self::PARENT_NOTE_MAX . ' characters: what this ticket reports (site, error, date).'),
+                    ),
+                    'required'             => array('parent', 'note'),
+                    'additionalProperties' => false,
+                ),
+            ),
         ));
         // In run order, so the list reads the way changes happen.
         usort($all, static function ($a, $b) {
@@ -194,10 +222,23 @@ final class AiActionsTools
             }
             return $out;
         }
-        $key = self::CHOICE_KEY[$name] ?? null;
+        if ($name === 'link_parent') {
+            $given = array_keys($input);
+            sort($given);
+            if ($given !== array('note', 'parent') || !is_string($input['parent'])) {
+                return null;
+            }
+            $note = self::text($input['note'], 1, self::PARENT_NOTE_MAX);
+            $parent = self::validate('_parent', array('parent' => $input['parent']), $choices);
+            return $note === null || $parent === null ? null : array('parent' => $parent['parent'], 'note' => $note);
+        }
+        // "_parent": the choice half of link_parent, checked like any choice tool.
+        $tool = $name === '_parent' ? 'link_parent' : $name;
+        $key = self::CHOICE_KEY[$tool] ?? null;
         if ($key === null || array_keys($input) !== array($key) || !is_string($input[$key])) {
             return null;
         }
+        $name = $tool;
         $value = trim($input[$key]);
         if (!preg_match(self::CHOICE_FORMAT[$name], $value)) {
             return null;
@@ -270,11 +311,41 @@ final class AiActionsTools
         if (isset(self::TEXT[$name])) {
             return array('label' => $t['labels'][$name], 'value' => $input['text']);
         }
+        if ($name === 'link_parent') {
+            return array('label' => $t['labels'][$name],
+                         'value' => (AiActionsChoices::label($choices, $name, $input['parent']) ?? $input['parent']) . "\n" . $input['note']);
+        }
         $value = (string) self::choiceValue($name, $input);
         return array(
             'label' => $t['labels'][$name] ?? $name,
             'value' => AiActionsChoices::label($choices, $name, $value) ?? $value,
         );
+    }
+
+    /**
+     * Preview line for a change the checks refused: the action's label and
+     * what the model asked for, as short plain text, so the log shows what
+     * was wanted. $name is `[a-z_]` from the planner. Public for the unit tests.
+     *
+     * @param mixed $input
+     * @return array{label:string, value:string}
+     */
+    public static function rejectedLine(string $name, $input, array $t): array
+    {
+        $parts = array();
+        foreach (is_array($input) ? $input : array() as $v) {
+            if (is_scalar($v)) {
+                $parts[] = (string) $v;
+            }
+        }
+        $value = trim((string) preg_replace('/[\x00-\x1F\x7F]+/u', ' ', implode(' / ', $parts)));
+        if (!preg_match('//u', $value)) {
+            $value = '';
+        }
+        if (preg_match_all('/./su', $value) > 80) {
+            $value = implode('', array_slice(preg_split('//u', $value, -1, PREG_SPLIT_NO_EMPTY) ?: array(), 0, 79)) . '…';
+        }
+        return array('label' => $t['labels'][$name] ?? $name, 'value' => $value);
     }
 
     /** Sorts planned changes into run order (see WRITE). Public for the unit tests. */

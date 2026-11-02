@@ -60,6 +60,8 @@ final class AiActionsI18n
                 'draft_reply'  => 'Antwortentwurf',
                 'create_subticket' => 'Unter-Ticket',
                 'send_reply'   => 'Antwort senden',
+                'set_topic'    => 'Hilfethema',
+                'link_parent'  => 'Leitticket',
             ),
             'weekday'      => array('So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'),
             'note_title'   => 'AI-Aktion',
@@ -114,6 +116,8 @@ final class AiActionsI18n
                 'busy'              => 'Deine vorige Nachricht läuft noch. Bitte kurz warten.',
                 'limit_requests'    => 'Tageslimit für Nachrichten erreicht. Morgen geht es weiter, oder der Admin hebt das Limit an.',
                 'limit_tokens'      => 'Tageslimit für die AI erreicht. Morgen geht es weiter, oder der Admin hebt das Limit an.',
+                'urgent'            => 'nicht automatisch geschlossen: Priorität High oder Emergency',
+                'is_parent'         => 'Ticket hat selbst Unter-Tickets',
             ),
         ) : array(
             'title'        => 'AI assistant',
@@ -153,6 +157,8 @@ final class AiActionsI18n
                 'draft_reply'  => 'Reply draft',
                 'create_subticket' => 'Sub-ticket',
                 'send_reply'   => 'Send reply',
+                'set_topic'    => 'Help topic',
+                'link_parent'  => 'Parent ticket',
             ),
             'weekday'      => array('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'),
             'note_title'   => 'AI action',
@@ -207,6 +213,8 @@ final class AiActionsI18n
                 'busy'              => 'Your previous message is still running. Please wait a moment.',
                 'limit_requests'    => 'Daily message limit reached. It resets tomorrow, or your admin can raise it.',
                 'limit_tokens'      => 'Daily AI limit reached. It resets tomorrow, or your admin can raise it.',
+                'urgent'            => 'not closed automatically: priority High or Emergency',
+                'is_parent'         => 'ticket has sub-tickets of its own',
             ),
         );
     }

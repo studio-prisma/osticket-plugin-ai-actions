@@ -887,5 +887,61 @@ check('admin: team membership needs team, agent and yes/no', AiActionsAdminTools
 check('admin: system prompt names the limits', strpos(AiActionsAdminTools::system('Desk', 'now'), 'You never delete') !== false
     && strpos(AiActionsAdminTools::system('Desk', 'now'), 'roles, permissions') !== false);
 
+// ------------------------------------------------------------------ 0.5.3
+
+$t3 = AiActionsI18n::strings('de', 'Desk');
+check('0.5.3: a closed ticket is skipped unless the rule asks for statuses',
+    AiActionsAutomation::skipClosed(array('statuses' => array()), false) === true
+    && AiActionsAutomation::skipClosed(array('statuses' => array(4)), false) === false
+    && AiActionsAutomation::skipClosed(array('statuses' => array()), true) === false);
+check('0.5.3: a refused change keeps its label and what the model wanted',
+    AiActionsTools::rejectedLine('set_status', array('status' => '9'), $t3) === array('label' => 'Status', 'value' => '9'));
+$long = AiActionsTools::rejectedLine('add_internal_note', array('text' => str_repeat('ä', 200) . "\x07"), $t3);
+check('0.5.3: refused text is cut to 80 characters, no control characters',
+    $long['label'] === 'Interne Notiz' && preg_match_all('/./su', $long['value']) === 80 && strpos($long['value'], "\x07") === false);
+check('0.5.3: refused input that is no list gives an empty value',
+    AiActionsTools::rejectedLine('set_status', 'x', $t3)['value'] === '' && AiActionsTools::rejectedLine('x_y', null, $t3)['label'] === 'x_y');
+check('0.5.3: only High/Emergency closes are held back',
+    AiActionsAutomation::isUrgentClose('closed', 1) && AiActionsAutomation::isUrgentClose('closed', 2)
+    && !AiActionsAutomation::isUrgentClose('closed', 3) && !AiActionsAutomation::isUrgentClose('open', 1)
+    && !AiActionsAutomation::isUrgentClose('closed', 0));
+$note = AiActionsAutomation::runNote(array('Einordnung: Erfolgsmeldung.'), array(
+    array('label' => 'Interne Notiz', 'value' => 'Einordnung: Erfolgsmeldung.', 'ok' => true, 'action' => 'add_internal_note'),
+    array('label' => 'Priorität', 'value' => 'Low', 'ok' => true, 'action' => 'set_priority'),
+    array('label' => 'Status', 'value' => 'Hinfällig', 'ok' => false, 'error' => 'urgent', 'action' => 'set_status'),
+), $t3);
+check('0.5.3: one note per run: the AI note, then the other changes, no repeated note line',
+    $note === "Einordnung: Erfolgsmeldung.\n\nÄnderungen:\n- Priorität: Low (erledigt)\n- Status: Hinfällig (fehlgeschlagen ("
+        . $t3['errors']['urgent'] . '))', $note);
+check('0.5.3: a run without a note still lists its changes',
+    AiActionsAutomation::runNote(array(), array(array('label' => 'Priorität', 'value' => 'Low', 'ok' => true, 'action' => 'set_priority')), $t3)
+        === "Änderungen:\n- Priorität: Low (erledigt)");
+check('0.5.3: the rule task holds a triage scheme (3000 characters)',
+    strlen(AiActionsRules::normalise(array('task' => str_repeat('x', 3500)))['task']) === AiActionsRules::TASK_MAX);
+$pc = array('link_parent' => array(array('value' => '12', 'label' => '#000012 Serie (Offen, 2026-11-01)')),
+            'set_topic' => array(array('value' => '3', 'label' => 'Support / Alerts')));
+check('0.5.3: link_parent needs a listed parent and a note',
+    AiActionsTools::validate('link_parent', array('parent' => '12', 'note' => ' Site a, Fehler b '), $pc) === array('parent' => '12', 'note' => 'Site a, Fehler b')
+    && AiActionsTools::validate('link_parent', array('parent' => '13', 'note' => 'x'), $pc) === null
+    && AiActionsTools::validate('link_parent', array('parent' => '12', 'note' => ''), $pc) === null
+    && AiActionsTools::validate('link_parent', array('parent' => '12'), $pc) === null
+    && AiActionsTools::validate('link_parent', array('parent' => '12', 'note' => 'x', 'y' => 1), $pc) === null
+    && AiActionsTools::validate('link_parent', array('parent' => '12', 'note' => str_repeat('x', AiActionsTools::PARENT_NOTE_MAX + 1)), $pc) === null);
+check('0.5.3: "_parent" is internal: no tool of that name',
+    !in_array('_parent', array_column(AiActionsTools::definitions(true), 'name'), true) && !AiActionsTools::isWrite('_parent'));
+check('0.5.3: set_topic only with a listed topic',
+    AiActionsTools::validate('set_topic', array('topic' => '3'), $pc) === array('topic' => '3')
+    && AiActionsTools::validate('set_topic', array('topic' => '4'), $pc) === null);
+check('0.5.3: preview of link_parent names the lead ticket and the note',
+    AiActionsTools::summary('link_parent', array('parent' => '12', 'note' => 'Site a'), $t3, $pc)
+        === array('label' => 'Leitticket', 'value' => "#000012 Serie (Offen, 2026-11-01)\nSite a"));
+check('0.5.3: topic runs first, parent link before transfer and status',
+    array_column(AiActionsTools::inRunOrder(array(array('action' => 'set_status', 'input' => array()),
+        array('action' => 'link_parent', 'input' => array()), array('action' => 'set_due_date', 'input' => array()),
+        array('action' => 'set_topic', 'input' => array()))), 'action') === array('set_topic', 'set_due_date', 'link_parent', 'set_status'));
+check('0.5.3: topic and parent link can be undone', AiActionsTools::undoable('set_topic') && AiActionsTools::undoable('link_parent'));
+check('0.5.3: rules can allow the new actions', isset(AiActionsRules::ACTIONS['set_topic'], AiActionsRules::ACTIONS['link_parent'])
+    && AiActionsRules::normalise(array('actions' => array('set_topic', 'link_parent', 'evil')))['actions'] === array('set_topic', 'link_parent'));
+
 echo "\n$count checks, $failures failed\n";
 exit($failures ? 1 : 0);

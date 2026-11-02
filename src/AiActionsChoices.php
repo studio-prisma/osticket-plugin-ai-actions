@@ -39,7 +39,54 @@ final class AiActionsChoices
             $field = $ticket->getTransferForm()->getField('dept');
             $out['transfer'] = $field ? self::options($field->getChoices(), (string) $ticket->getDeptId()) : array();
         }
+        if ($ticket->checkStaffPerm($staff, Ticket::PERM_EDIT)) {
+            // The ticket view's "Help Topic" field: the core decides which topics it offers.
+            $field = AiActionsExecutor::topicField($ticket, $staff);
+            $out['set_topic'] = $field ? self::options($field->getChoices(), (string) (int) $ticket->getTopicId()) : array();
+            $out['link_parent'] = self::parents($ticket, $staff);
+        }
         return array_filter($out);
+    }
+
+    /** Lead tickets to choose from, at most this many, newest first. */
+    public const PARENTS_MAX = 20;
+
+    /**
+     * Open tickets of the same customer that this ticket can hang under:
+     * not itself, not a sub-ticket themselves, visible to the agent. A
+     * ticket that is a parent itself or already a sub-ticket gets none:
+     * no chains, and moving a sub-ticket is a decision for a person.
+     */
+    private static function parents($ticket, $staff): array
+    {
+        if ($ticket->getPid() || self::hasChildren((int) $ticket->getId())) {
+            return array();
+        }
+        $res = db_query(sprintf("SELECT t.ticket_id FROM `%s` t JOIN `%s` s ON s.id=t.status_id
+            WHERE t.user_id=%d AND t.ticket_id<>%d AND (t.ticket_pid IS NULL OR t.ticket_pid=0) AND s.state='open'
+            ORDER BY t.created DESC LIMIT %d", TICKET_TABLE, TICKET_STATUS_TABLE, (int) $ticket->getOwnerId(),
+            (int) $ticket->getId(), self::PARENTS_MAX * 2));
+        $out = array();
+        while ($res && ($row = db_fetch_row($res)) && count($out) < self::PARENTS_MAX) {
+            $t = Ticket::lookup((int) $row[0]);
+            if (!$t || !$t->checkStaffPerm($staff)) {
+                continue;
+            }
+            // The subject is the customer's text: one line, short, cleaned again in render().
+            $subject = (string) $t->getSubject();
+            if (preg_match_all('/./su', $subject) > 80) {
+                $subject = implode('', array_slice(preg_split('//u', $subject, -1, PREG_SPLIT_NO_EMPTY) ?: array(), 0, 79)) . '…';
+            }
+            $out[] = array('value' => (string) $t->getId(), 'label' => sprintf('#%s %s (%s, %s)', $t->getNumber(),
+                $subject, (string) $t->getStatus(), substr((string) $t->created, 0, 10)));
+        }
+        return $out;
+    }
+
+    public static function hasChildren(int $ticketId): bool
+    {
+        $res = db_query(sprintf('SELECT 1 FROM `%s` WHERE ticket_pid=%d LIMIT 1', TICKET_TABLE, $ticketId));
+        return $res && db_num_rows($res) > 0;
     }
 
     /** "To: Name <mail>; Cc: …" for the preview. Public for the controller. */

@@ -27,6 +27,8 @@ final class AiActionsRules
         'assign_team'       => 'Assign to team',
         'transfer'          => 'Department',
         'set_due_date'      => 'Due date',
+        'set_topic'         => 'Help topic',
+        'link_parent'       => 'Parent ticket',
         'set_status'        => 'Status',
         'create_subticket'  => 'Sub-ticket',
         'draft_reply'       => 'Reply draft',
@@ -37,6 +39,9 @@ final class AiActionsRules
                                 'stale' => 'open tickets without an update for N days');
 
     public const SOURCES = array('email' => 'Email', 'web' => 'Web', 'phone' => 'Phone', 'api' => 'API', 'other' => 'Other');
+
+    /** Characters of a rule's task: room for a triage scheme. */
+    public const TASK_MAX = 3000;
 
     /** Tickets queued per schedule run of one rule. */
     public const SCHEDULE_MAX = 20;
@@ -114,7 +119,7 @@ final class AiActionsRules
         return array(
             'trigger'      => isset(self::TRIGGERS[$trigger]) ? $trigger : 'new_ticket',
             'agent'        => is_scalar($in['agent'] ?? null) ? max(0, (int) $in['agent']) : 0,
-            'task'         => AiActionsController::welcome($in['task'] ?? '') ?: '',
+            'task'         => AiActionsController::welcome($in['task'] ?? '', self::TASK_MAX) ?: '',
             'actions'      => $pick($in['actions'] ?? array(), array_keys(self::ACTIONS)),
             'mode'         => $mode === 'auto' ? 'auto' : 'propose',
             'depts'        => $ints($in['depts'] ?? array()),
@@ -433,7 +438,7 @@ final class AiActionsRules
             . $row('Text contains', sprintf('<input name="contains" size="40" maxlength="60" value="%s">', call_user_func($e, $r['contains'])),
                 'Subject or latest customer message; several words separated by commas, any one matches.')
             . $row('AI agent', '<select name="agent">' . $opt($agentChoices, $r['agent']) . '</select>')
-            . $row('Task', sprintf('<textarea name="task" rows="4" cols="70" maxlength="500">%s</textarea>', call_user_func($e, $r['task'])),
+            . $row('Task', sprintf('<textarea name="task" rows="8" cols="70" maxlength="%d">%s</textarea>', self::TASK_MAX, call_user_func($e, $r['task'])),
                 'What the AI agent should do, e.g. "Set the priority from the urgency the customer describes and assign the right team."')
             . $row('Allowed actions', $actions, 'The AI agent can only plan these. Its role still decides what is possible.')
             . $row('Mode', '<select name="mode">' . $opt(array('propose' => 'Proposal: a human confirms in the ticket', 'auto' => 'Automatic'), $r['mode']) . '</select>')

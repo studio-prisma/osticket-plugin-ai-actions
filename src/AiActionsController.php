@@ -116,13 +116,13 @@ final class AiActionsController
         return $s;
     }
 
-    /** Welcome text for an empty conversation: plain text, at most 500 characters. Public for the unit tests. */
-    public static function welcome($raw): string
+    /** Welcome text for an empty conversation: plain text, at most $max characters. Public for the unit tests. */
+    public static function welcome($raw, int $max = 500): string
     {
         $s = is_string($raw) && preg_match('//u', $raw) ? str_replace("\r\n", "\n", $raw) : '';
         $s = trim((string) preg_replace('/[\x00-\x08\x0B-\x1F\x7F]+/u', '', $s));
-        if (preg_match_all('/./su', $s) > 500) {
-            $s = implode('', array_slice(preg_split('//u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: array(), 0, 500));
+        if (preg_match_all('/./su', $s) > $max) {
+            $s = implode('', array_slice(preg_split('//u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: array(), 0, $max));
         }
         return $s;
     }
@@ -332,12 +332,14 @@ final class AiActionsController
             // ticket or the agent's rights may have changed since the plan.
             $choices = AiActionsChoices::forTicket($ticket, $thisstaff);
             $input = AiActionsTools::validate((string) ($c['action'] ?? ''), $c['input'] ?? null, $choices);
+            $same = $input === null ? AiActionsExecutor::sameStatus($ticket, (string) ($c['action'] ?? ''), $c['input'] ?? null) : null;
             $line = $input !== null
                 ? AiActionsTools::summary($c['action'], $input, $t, $choices)
-                : array('label' => $t['labels'][$c['action'] ?? ''] ?? (string) ($c['action'] ?? ''), 'value' => '');
+                : ($same ? array('label' => $t['labels']['set_status'], 'value' => $same['value'])
+                         : AiActionsTools::rejectedLine((string) ($c['action'] ?? ''), $c['input'] ?? null, $t));
             $r = $input !== null
                 ? AiActionsExecutor::run($ticket, $thisstaff, $c['action'], $input, $assigned)
-                : array('ok' => false, 'error' => 'rejected');
+                : ($same ?: array('ok' => false, 'error' => 'rejected'));
             $assigned = $assigned || ($r['ok'] && in_array($c['action'], array('assign_agent', 'assign_team'), true));
             if (!empty($r['created'])) {
                 $line['value'] .= "\n→ #" . $r['created'];

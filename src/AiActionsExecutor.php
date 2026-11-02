@@ -34,6 +34,10 @@ final class AiActionsExecutor
                 return self::transfer($ticket, $staff, $value);
             case 'set_status':
                 return self::status($ticket, $staff, $value, $assignedInRun);
+            case 'set_topic':
+                return self::topic($ticket, $staff, $value);
+            case 'link_parent':
+                return self::linkParent($ticket, $staff, $value, (string) ($input['note'] ?? ''));
             case 'add_internal_note':
                 return self::note($ticket, $staff, (string) ($input['text'] ?? ''));
             case 'draft_reply':
@@ -173,8 +177,109 @@ final class AiActionsExecutor
             case 'set_status':
                 // Back to the old status; reopening must not hand the ticket to whoever undoes.
                 return self::status($ticket, $staff, (string) (int) $previous, true);
+            case 'set_topic':
+                return self::undoTopic($ticket, $staff, (int) ($previous['topic'] ?? 0), (int) ($previous['sla'] ?? 0));
+            case 'link_parent':
+                if (!$ticket->checkStaffPerm($staff, Ticket::PERM_EDIT)) {
+                    return self::fail('forbidden');
+                }
+                $ticket->setPid(((int) $previous) ?: null);
+                return $ticket->save() ? array('ok' => true) : self::fail('rejected');
         }
         return self::fail('rejected');
+    }
+
+    /**
+     * The ticket view's "Help Topic" edit. A topic with an SLA plan brings
+     * it along, through the SLA field's own edit, which recomputes the due
+     * date (core does that only for SLA and due date changes, not for the
+     * topic).
+     */
+    /**
+     * The "Help Topic" field with the topics of $staff. The core field asks
+     * the signed-in agent ($thisstaff), who doesn't exist in the cron, and
+     * would be the wrong person for an AI agent anyway.
+     */
+    public static function topicField($ticket, $staff)
+    {
+        $field = $ticket->getField('topic');
+        if ($field && property_exists($field, 'topics')) {
+            $field->topics = $staff->getTopicNames(false, false);
+        }
+        return $field;
+    }
+
+    private static function topic($ticket, $staff, string $value): array
+    {
+        if (!$ticket->checkStaffPerm($staff, Ticket::PERM_EDIT) || !($field = self::topicField($ticket, $staff))) {
+            return self::fail('forbidden');
+        }
+        if (!ctype_digit($value) || !self::listed($field->getChoices(), $value) || !($topic = Topic::lookup((int) $value))) {
+            return self::fail('rejected');
+        }
+        $previous = array('topic' => (int) $ticket->getTopicId(), 'sla' => (int) $ticket->getSLAId());
+        if ($previous['topic'] === (int) $value) {
+            return array('ok' => true, 'unchanged' => true, 'previous' => $previous);
+        }
+        $r = self::editField($ticket, $field, $value, $previous);
+        $sla = (int) $topic->getSLAId();
+        if (!$r['ok'] || !$sla || $sla === $previous['sla']) {
+            return $r;
+        }
+        $ticket = Ticket::lookup($ticket->getId());
+        $s = self::editField($ticket, $ticket->getField('sla'), (string) $sla, $previous);
+        // The topic changed either way; undo must still be able to put it back.
+        return $s['ok'] ? $r : $r + array('message' => 'SLA plan of the topic not applied: ' . ($s['message'] ?? $s['error']));
+    }
+
+    /** Topic and SLA back as they were; set directly, the old values may be disabled by now. */
+    private static function undoTopic($ticket, $staff, int $topic, int $sla): array
+    {
+        if (!$ticket->checkStaffPerm($staff, Ticket::PERM_EDIT)) {
+            return self::fail('forbidden');
+        }
+        $ticket->topic_id = $topic;
+        $ticket->sla_id = $sla;
+        if (!$ticket->save()) {
+            return self::fail('rejected');
+        }
+        $ticket->logEvent('edited', array('topic_id' => array(null, $topic), 'sla_id' => array(null, $sla)));
+        $ticket->updateEstDueDate();
+        return array('ok' => true);
+    }
+
+    /**
+     * Hangs the ticket under an open lead ticket of the same customer
+     * (ticket_pid, as sub-tickets are linked). The note goes onto the lead
+     * ticket first: without it the link would lose what this ticket said.
+     */
+    private static function linkParent($ticket, $staff, string $value, string $note): array
+    {
+        if (!$ticket->checkStaffPerm($staff, Ticket::PERM_EDIT)) {
+            return self::fail('forbidden');
+        }
+        if ($ticket->getPid() || AiActionsChoices::hasChildren((int) $ticket->getId())) {
+            return self::fail('is_parent');
+        }
+        $parent = ctype_digit($value) ? Ticket::lookup((int) $value) : null;
+        if (!$parent || (int) $parent->getId() === (int) $ticket->getId() || !$parent->isOpen() || $parent->getPid()
+                || (int) $parent->getOwnerId() !== (int) $ticket->getOwnerId() || !$parent->checkStaffPerm($staff)) {
+            return self::fail('rejected');
+        }
+        $errors = array();
+        $posted = $parent->postNote(array(
+            'title' => sprintf('Sub-ticket #%s', $ticket->getNumber()),
+            'note'  => new TextThreadEntryBody($note . "\n\n#" . $ticket->getNumber() . ' ' . $ticket->getSubject()),
+        ), $errors, $staff);
+        if (!$posted) {
+            return self::fail('rejected', $errors);
+        }
+        $previous = (int) $ticket->getPid();
+        $ticket->setPid((int) $parent->getId());
+        if (!$ticket->save()) {
+            return self::fail('rejected');
+        }
+        return array('ok' => true, 'previous' => $previous);
     }
 
     /**
@@ -358,6 +463,25 @@ final class AiActionsExecutor
             return self::fail('rejected', $errors);
         }
         return array('ok' => true, 'previous' => $previous);
+    }
+
+    /**
+     * A set_status to the status the ticket already has. The choice lists
+     * leave the current status out, so the checks would refuse it; it is
+     * "unchanged" instead. Null for anything else.
+     *
+     * @param mixed $input
+     * @return array{ok:bool, unchanged:bool, previous:int, value:string}|null
+     */
+    public static function sameStatus($ticket, string $action, $input): ?array
+    {
+        $value = is_array($input) && is_string($input['status'] ?? null) ? trim($input['status']) : '';
+        if ($action !== 'set_status' || !ctype_digit($value) || (int) $value !== (int) $ticket->getStatusId()) {
+            return null;
+        }
+        $status = TicketStatus::lookup((int) $value);
+        return array('ok' => true, 'unchanged' => true, 'previous' => (int) $value,
+                     'value' => $status ? (string) $status->getLocalName() : $value);
     }
 
     /** Is $value a key of a (possibly grouped) core choice list? */

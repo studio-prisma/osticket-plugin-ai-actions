@@ -151,7 +151,11 @@ final class AiActionsFakeLlm implements AiActionsLlm
             array('/\b(close|schließ)/iu', 'set_status', 'status', '/^Closed/i'),
             array('/\b(priority high|hoch)/iu', 'set_priority', 'priority', '/^High/i'),
             array('/\bsales\b/iu', 'transfer', 'department', '/^Sales/i'),
+            array('/\b(topic|thema)\b/iu', 'set_topic', 'topic', '/./'),
         );
+        if (preg_match('/\b(parent|leitticket)\b/iu', $prompt) && ($value = self::option($options, 'link_parent', '/./')) !== null) {
+            $calls[] = array('link_parent', array('parent' => $value, 'note' => 'Fake: same alert, site a.example.'));
+        }
         if (preg_match('/\b(note|notiz)/iu', $prompt)) {
             $calls[] = array('add_internal_note', array('text' => 'Fake note: customer called back.'));
         }
