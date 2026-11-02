@@ -16,7 +16,7 @@ A chat in the osTicket agent panel that turns plain-language requests into ticke
 | Where | A bubble in the bottom-right corner of the agent panel. The conversation belongs to the ticket that is open: the ticket view, or a card in the quick view of the [Ticket Board](https://github.com/studio-prisma/osticket-plugin-board) |
 | Questions | "What does the customer actually want?", "Summarise the thread". Answered from the ticket's facts and thread; nothing changes |
 | Changes | Due date, priority, help topic (with its SLA), assignment to an agent or team, department, status, parent ticket, internal note, reply draft, sub-ticket, sent reply (setting, off by default), actions of other plugins ([EXTENSIONS](docs/EXTENSIONS.md)) |
-| Reading | Parent ticket and sub-tickets the agent may open; attachments (text files; PDFs and images with Claude) |
+| Reading | Parent ticket and sub-tickets the agent may open; attachments (text files; PDFs and images with Claude); linked pages on domains the admin allows (Claude only) |
 | Providers | Anthropic (Claude Sonnet 5.5, Opus 5.5), OpenAI (GPT-6.1 Sol, Terra), Mistral (Large, Medium; EU) |
 | Settings | For admins on admin pages: canned responses, help topics, lists, SLA, filters (including reject and email), departments and department access, teams, with before → after and undo; never deletes ([ADMIN](docs/ADMIN.md)) |
 | AI agents and rules | Agent accounts without login that work by rules: triage on new tickets, help when assigned, replies to customer messages, scheduled follow-ups. As proposals (with a dot on bubble and board card) or automatic (undo from the ticket chat for 24 hours), with a send guard for replies ([RULES](docs/RULES.md)) |
@@ -80,6 +80,7 @@ Short version:
 | Allow sending replies | off | The AI may plan an email reply; sent only after Run, not undoable |
 | Model | Claude Sonnet 5.5 | Also Claude Opus 5.5, GPT-6.1 Sol/Terra, Mistral Large/Medium. The model picks the provider; the key must be one of that provider (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`) |
 | Effort | Low | How long the model thinks. Low is enough for most requests |
+| Pages the assistant may read | empty | Claude only. Domains whose pages the assistant may open from links in the ticket, e.g. a vendor's security advisories. Anthropic fetches the page (at most 3 per request), not your server. Empty = off |
 | Messages | 100 | Per agent and day, 0 = no limit |
 | Tokens | 500,000 | Input plus output per agent and day, 0 = no limit |
 | Thread length | 12,000 | Characters of the thread the model reads, newest first (2,000 to 50,000) |

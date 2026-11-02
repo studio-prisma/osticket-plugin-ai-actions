@@ -6,9 +6,13 @@ declare(strict_types=1);
  * One request to a language model, in a provider-neutral shape.
  *
  * send() returns:
- *   stop     'tool_use' | 'end_turn' | 'max_tokens' | 'refusal'
+ *   stop     'tool_use' | 'end_turn' | 'max_tokens' | 'refusal' | 'pause_turn' (Claude, web_fetch)
  *   content  list of ['type' => 'text', 'text' => ...]
  *            and ['type' => 'tool_use', 'id' => ..., 'name' => ..., 'input' => array]
+ *            (Claude also returns server tool blocks; they go back unchanged)
+ *
+ * Tools with a 'type' are provider-side tools (web_fetch). Only Claude
+ * runs them; the other providers leave them out.
  *   usage    ['input' => int, 'output' => int]
  */
 interface AiActionsLlm

@@ -33,7 +33,7 @@ final class AiActionsController
                                      'name' => '', 'icon' => 'sparkles', 'image' => '', 'accent' => '', 'welcome' => '',
                                      'allow_send' => false, 'auto_paused' => false, 'ai_notice' => true,
                                      'ai_notice_text' => 'This reply was written by our AI assistant.', 'link_domains' => array(),
-                                     'auto_per_hour' => 20);
+                                     'auto_per_hour' => 20, 'fetch_domains' => array());
 
     /** Icons for the bubble and the window header; "image" uses the image setting. */
     public const ICONS = array('sparkles', 'robot', 'chat', 'bulb', 'bolt', 'initial', 'image');
@@ -86,6 +86,7 @@ final class AiActionsController
             'ai_notice_text' => self::welcome($raw['ai_notice_text'] ?? '') ?: 'This reply was written by our AI assistant.',
             'link_domains' => self::domains($raw['link_domains'] ?? ''),
             'auto_per_hour' => self::number($raw['auto_per_hour'] ?? null, 20, 1, 1000),
+            'fetch_domains' => self::domains($raw['fetch_domains'] ?? ''),
         );
     }
 
@@ -268,7 +269,7 @@ final class AiActionsController
             $reader = static function (string $name, array $input) use ($ticket, $thisstaff, $tz, $files) {
                 return AiActionsReaders::run($name, $input, $ticket, $thisstaff, $tz, $files);
             };
-            $result = (new AiActionsPlanner($llm, $choices, $reader))->turn(AiActionsPlanner::system($context), $chat['messages'], $blocks);
+            $result = (new AiActionsPlanner($llm, $choices, $reader, null, self::$settings['fetch_domains']))->turn(AiActionsPlanner::system($context), $chat['messages'], $blocks);
         } catch (AiActionsLlmError $e) {
             // Status and error type only: the detail never carries the key or the prompt.
             error_log(sprintf('ai-actions: model call failed (%s) %s', $e->kind, $e->getMessage()));
@@ -825,7 +826,7 @@ final class AiActionsController
         AiActionsExtensions::bind($ticket, $agent);
         $system = AiActionsPlanner::system($context) . self::agentBrief((string) $agent->getName(), $rule, (string) $info['persona']);
         try {
-            $result = (new AiActionsPlanner($llm, $choices, $reader, $rule['actions']))
+            $result = (new AiActionsPlanner($llm, $choices, $reader, $rule['actions'], self::$settings['fetch_domains']))
                 ->turn($system, array(), AiActionsPlanner::firstMessage($context, $rule['task'] !== '' ? $rule['task'] : 'Work on this ticket.'));
         } catch (AiActionsLlmError $e) {
             error_log(sprintf('ai-actions: AI agent %d, model call failed (%s) %s', $agentId, $e->kind, $e->getMessage()));

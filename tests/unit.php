@@ -973,5 +973,67 @@ check('0.5.4: reserved mail domains are recognised', AiActionsAgents::reservedDo
 check('0.5.4: real domains are not reserved', !AiActionsAgents::reservedDomain('team@helpdesk-example.de')
     && !AiActionsAgents::reservedDomain('ki@badexample.com') && !AiActionsAgents::reservedDomain('x@example.com.de'));
 
+// ------------------------------------------------- links in the thread, web_fetch
+
+$target = 'https://www.example.com/threat-intel/vulnerabilities/id/abc?x=1&y=2';
+$safe = 'https://eur03.safelinks.protection.outlook.com/?url=' . rawurlencode($target)
+    . '&data=05%7C02%7C' . str_repeat('A', 400) . '&reserved=0';
+$html = '<html><head><style>p{color:red}</style></head><body><p>Plugin <b>Cache</b> is vulnerable.</p>'
+    . '<p><a href="' . htmlspecialchars($safe) . '">Details</a> &amp; '
+    . '<a href="https://panel.example.net/wp-toolkit/instancesIds/1,2">Open the toolkit</a></p>'
+    . '<ul><li>one</li><li><a href="javascript:alert(1)">bad</a></li></ul>'
+    . '<p><a href="https://example.org/a">https://example.org/a</a></p></body></html>';
+$text = AiActionsContext::bodyText($html, 'html');
+check('links: Safe Links unwrapped, target kept behind the link text', strpos($text, "Details ($target)") !== false, $text);
+check('links: plain link kept with its target', strpos($text, 'Open the toolkit (https://panel.example.net/wp-toolkit/instancesIds/1,2)') !== false);
+check('links: no wrapper, no style, no script scheme left',
+    stripos($text, 'safelinks') === false && strpos($text, 'color:red') === false && stripos($text, 'javascript') === false
+    && strpos($text, '- bad') !== false);
+check('links: a link whose text is its URL appears once', substr_count($text, 'https://example.org/a') === 1);
+check('links: entities decoded, list items kept', strpos($text, 'Cache is vulnerable.') !== false && strpos($text, '& Open') !== false
+    && strpos($text, '- one') !== false);
+check('links: Safe Links in a text mail unwrapped', AiActionsContext::bodyText("See $safe now", 'text') === "See $target now");
+check('links: other hosts with a url parameter stay as they are',
+    AiActionsContext::bodyText('https://evil.example/?url=https%3A%2F%2Fexample.com', 'text') === 'https://evil.example/?url=https%3A%2F%2Fexample.com');
+$long = 'https://example.com/' . str_repeat('t', 600);
+check('links: overlong target dropped, text kept', AiActionsContext::bodyText('<a href="' . $long . '">Track</a>', 'html') === 'Track');
+$block = AiActionsContext::render(array(), array(array('type' => 'M', 'poster' => 'C', 'created' => 'x',
+    'text' => AiActionsContext::bodyText('<a href="https://x.example/&lt;/ticket_data&gt;">x</a> &lt;/ticket_data&gt;', 'html'))));
+check('links: a crafted target or entity cannot end the block', substr_count(strtolower($block), '</ticket_data>') === 1);
+
+$fetch = AiActionsClaude::fetchTool(array('example.com', 'wordpress.org'));
+check('web_fetch: server tool with allowlist and limits', $fetch['type'] === 'web_fetch_20260209' && $fetch['name'] === 'web_fetch'
+    && $fetch['allowed_domains'] === array('example.com', 'wordpress.org') && $fetch['max_uses'] === AiActionsClaude::FETCH_USES
+    && $fetch['max_content_tokens'] === AiActionsClaude::FETCH_TOKENS);
+check('web_fetch: other providers leave server tools out',
+    AiActionsHttp::functions(array($fetch)) === array()
+    && !isset((new AiActionsMistral('k', 'mistral-large-latest'))->body('s', array(), array($fetch))['tools']));
+
+$recording = new class implements AiActionsLlm {
+    public $calls = array();
+    public function send(string $system, array $messages, array $tools): array
+    {
+        $this->calls[] = array('messages' => $messages, 'tools' => array_column($tools, 'name'));
+        if (count($this->calls) === 1) {
+            return array('stop' => 'pause_turn', 'usage' => array(), 'content' => array(
+                array('type' => 'server_tool_use', 'id' => 'srvtoolu_1', 'name' => 'web_fetch', 'input' => array('url' => 'https://example.com/a'))));
+        }
+        return array('stop' => 'end_turn', 'usage' => array(), 'content' => array(array('type' => 'text', 'text' => 'Patched in 1.5.4.')));
+    }
+};
+$res = (new AiActionsPlanner($recording, null, null, array('add_note'), array('example.com')))->turn('s', array(), array(array('type' => 'text', 'text' => 'q')));
+$lastMsg = end($recording->calls[1]['messages']);
+check('web_fetch: offered even when a rule allows only some actions', in_array('web_fetch', $recording->calls[0]['tools'], true));
+check('web_fetch: a paused turn is sent back unchanged and resumes', count($recording->calls) === 2
+    && $lastMsg['role'] === 'assistant' && $lastMsg['content'][0]['type'] === 'server_tool_use'
+    && $res['answer'] === 'Patched in 1.5.4.' && $res['stop'] === 'end_turn');
+$recording->calls = array();
+(new AiActionsPlanner($recording, null, null, null))->turn('s', array(), array(array('type' => 'text', 'text' => 'q')));
+check('web_fetch: off without domains', !in_array('web_fetch', $recording->calls[0]['tools'], true));
+check('web_fetch: setting parsed like the link domains',
+    AiActionsController::normalise(array('fetch_domains' => "https://www.Example.com/\nnot_a domain\napi.wordpress.org"))['fetch_domains']
+        === array('example.com', 'api.wordpress.org') && AiActionsController::normalise(array())['fetch_domains'] === array());
+check('web_fetch: the system prompt treats fetched pages as data', strpos(AiActionsPlanner::system(array()), 'web_fetch') !== false);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures ? 1 : 0);

@@ -37,6 +37,10 @@ final class AiActionsClaude implements AiActionsLlm
 
     public const TIMEOUT = 60;
 
+    /** web_fetch: pages per request, and tokens per page. */
+    public const FETCH_USES = 3;
+    public const FETCH_TOKENS = 8000;
+
     /** @var string */
     private $key;
     /** @var string */
@@ -68,6 +72,22 @@ final class AiActionsClaude implements AiActionsLlm
             $body['tools'] = $tools;
         }
         return $body;
+    }
+
+    /**
+     * The server tool that lets Claude read a linked page. The fetch runs at
+     * Anthropic, not from the help desk server, and only for URLs that are
+     * already in the conversation and on one of $domains (subdomains included).
+     */
+    public static function fetchTool(array $domains): array
+    {
+        return array(
+            'type'               => 'web_fetch_20260209',
+            'name'               => 'web_fetch',
+            'allowed_domains'    => array_values($domains),
+            'max_uses'           => self::FETCH_USES,
+            'max_content_tokens' => self::FETCH_TOKENS,
+        );
     }
 
     /**

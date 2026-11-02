@@ -163,6 +163,15 @@ class AiActionsConfig extends PluginConfig
                 ),
             )),
 
+            'fetch_domains' => new TextareaField(array(
+                'label'         => 'Pages the assistant may read',
+                'default'       => '',
+                'hint'          => 'Claude models only. The assistant may open links from the ticket that point to these '
+                                 . 'domains (one per line; subdomains included), e.g. a vendor\'s security advisory. '
+                                 . 'Anthropic fetches the page, not this server. Empty: no pages are read.',
+                'configuration' => array('rows' => 3, 'cols' => 40, 'html' => false, 'length' => 2000),
+            )),
+
             'sec_look' => new SectionBreakField(array(
                 'label' => 'Appearance',
             )),

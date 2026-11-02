@@ -57,12 +57,77 @@ final class AiActionsContext
                 'type'    => (string) $e->getType(),
                 'poster'  => (string) $e->getPoster(),
                 'created' => AiActionsTime::fromDb($e->getCreateDate(), $dbTz, $tz),
-                'text'    => $body ? (string) $body->getSearchable() : '',
+                'text'    => $body ? self::bodyText((string) $body, (string) $body->getType()) : '',
             );
         }
 
         return array('text' => self::render($facts, $entries, $since > 0, $max, self::related($ticket, $staff, $dbTz, $tz),
                      AiActionsReaders::listing($ticket)), 'last' => $last);
+    }
+
+    /** Longest link target kept. Longer ones are tracking noise, the text stays. */
+    public const URL_MAX = 500;
+
+    /**
+     * A thread entry as plain text, with link targets kept: "text (URL)".
+     *
+     * osTicket's getSearchable() drops every href, and alert mails often name
+     * the affected site or the fix only in a link. Safe Links wrappers
+     * (Microsoft 365) are unwrapped first; at ~500 characters each they would
+     * otherwise hide the real target. Public for the unit tests.
+     */
+    public static function bodyText(string $raw, string $type): string
+    {
+        if ($type !== 'html') {
+            return self::unwrapSafeLinks(trim($raw));
+        }
+        $s = (string) preg_replace('#<(style|script|head|title)\b[^>]*>.*?</\1\s*>|<!--.*?-->#is', '', $raw);
+        $s = (string) preg_replace_callback('#<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|\'([^\']*)\')[^>]*>(.*?)</a\s*>#is',
+            static function ($m) {
+                return self::link(html_entity_decode($m[1] !== '' ? $m[1] : ($m[2] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'), $m[3]);
+            }, $s);
+        $s = (string) preg_replace('#<br\s*/?>#i', "\n", $s);
+        $s = (string) preg_replace('#<li\b[^>]*>#i', '- ', $s);
+        $s = (string) preg_replace('#</(p|div|h[1-6]|li|tr|table|ul|ol|blockquote|pre)\s*>#i', "\n", $s);
+        $s = (string) preg_replace('#<[^>]+>#', ' ', $s);
+        $s = self::unwrapSafeLinks(html_entity_decode($s, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $s = (string) preg_replace("/[ \t\x{00a0}]+/u", ' ', $s);
+        $s = implode("\n", array_map('trim', explode("\n", $s)));
+        return trim((string) preg_replace("/\n{3,}/", "\n\n", $s));
+    }
+
+    /** One anchor: the target behind its text, or the text alone if the target is unusable. */
+    private static function link(string $href, string $label): string
+    {
+        $url = self::unwrapSafeLink(trim($href));
+        $text = trim(html_entity_decode((string) preg_replace('#<[^>]+>#', ' ', $label), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if (!preg_match('#^(https?://|mailto:)#i', $url) || strlen($url) > self::URL_MAX || preg_match('/[<>\s]/', $url)) {
+            return $label;
+        }
+        // Encoded so the entity decoding of the whole body leaves it as it is.
+        $shown = htmlspecialchars($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return $text === '' || $text === $url || $text === $href ? " $shown " : "$label ($shown)";
+    }
+
+    /** The real target of a Safe Links URL, or the URL unchanged. */
+    private static function unwrapSafeLink(string $url): string
+    {
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+        if (substr($host, -strlen('.safelinks.protection.outlook.com')) !== '.safelinks.protection.outlook.com') {
+            return $url;
+        }
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+        $target = is_string($q['url'] ?? null) ? $q['url'] : '';
+        return preg_match('#^(https?://|mailto:)#i', $target) ? $target : $url;
+    }
+
+    /** Safe Links in plain text (text mails, or a link whose text is its URL). */
+    private static function unwrapSafeLinks(string $s): string
+    {
+        return (string) preg_replace_callback('#https://[a-z0-9-]+\.safelinks\.protection\.outlook\.com/\?[^\s<>"\')]+#i',
+            static function ($m) {
+                return self::unwrapSafeLink($m[0]);
+            }, $s);
     }
 
     /**
