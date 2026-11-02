@@ -180,6 +180,8 @@ Only then select further roles.
 
 Replace the folder `include/plugins/ai-actions/` with the new release. Settings stay in osTicket's config table, the key file stays where it is. Read the CHANGELOG first: a major version bump means changed behaviour or settings.
 
+From 0.5.3 to 0.5.4: with SMTP, give each AI agent an address your mail server accepts (*AI agents* tab, column *Email (alerts)*; docs/RULES.md). The *Status* tab lists those still on `@example.com`.
+
 From 0.4.x to 0.5.0: the settings chat appears for admins on admin pages (docs/ADMIN.md). No new settings.
 
 From 0.3.x to 0.4.0: AI agents and rules are new and off until you create them (docs/RULES.md). They need osTicket's cron. New settings: emergency stop, AI notice, allowed link domains, automatic replies per hour.

@@ -12,7 +12,13 @@ From 0.4.0 the assistant can also work on its own: as an **AI agent**, following
 *AI agents* tab → name, department, role, optionally a model and a short persona.
 
 - An AI agent is a normal osTicket agent: it appears in assignment lists and its role decides what it may do. Give it a role with only what it needs.
-- Nobody can sign in with it: it gets an authentication backend that doesn't exist, a random password nobody knows, and any session of it ends at once. Its address is `…@example.com`, so alerts to it go nowhere.
+- Nobody can sign in with it: it gets an authentication backend that doesn't exist, a random password nobody knows, and any session of it ends at once.
+- **Email address.** osTicket alerts an AI agent like any agent (new ticket in its department, assignment, …), and every agent needs an address. Without one given, it gets `…@example.com`. That is fine without SMTP. With SMTP the mail server refuses that domain, and osTicket 1.18 then fails every further mail of the same run, alerts to people included (system log: "Cannot issue HELO to existing session"). So with SMTP, set an address in the *Email (alerts)* column that your mail server accepts:
+  - a team mailbox osTicket doesn't fetch, or an empty distribution list if nobody needs the alerts;
+  - for several AI agents on one mailbox, plus addresses (`team+triage@…`), if your mail server supports them; osTicket wants a different address per agent.
+  - Not one of the help desk's own addresses (Emails): osTicket would fetch its own alerts back and file mail from that address under the AI agent. The plugin refuses those, like osTicket's agent form does.
+  
+  The AI agent doesn't read mailboxes; its replies to customers go out from the department's address like anyone's. The *Status* tab warns while an AI agent has an address no mail server delivers to.
 - Pause an AI agent on the same tab; its rules stop with it.
 - A picture (https:// address or a path on this server) shows on its cards in the ticket chat and at its thread entries.
 

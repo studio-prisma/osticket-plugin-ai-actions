@@ -72,8 +72,8 @@ final class AiActionsAdmin
             case 'agent_create':
                 $r = AiActionsAgents::create((string) ($_POST['name'] ?? ''), (int) ($_POST['dept_id'] ?? 0),
                     (int) ($_POST['role_id'] ?? 0), (string) ($_POST['persona'] ?? ''), (string) ($_POST['model'] ?? ''),
-                    (string) ($_POST['image'] ?? ''));
-                $done = $r['id'] ? 'agent_created' : 'agent_failed';
+                    (string) ($_POST['image'] ?? ''), (string) ($_POST['email'] ?? ''));
+                $done = $r['id'] ? 'agent_created' : (isset($r['errors']['email']) ? 'agent_email' : 'agent_failed');
                 if (!$r['id']) {
                     error_log('ai-actions: AI agent not created: ' . implode(', ', array_keys($r['errors'])));
                 }
@@ -88,6 +88,9 @@ final class AiActionsAdmin
                 break;
             case 'agent_image':
                 $done = AiActionsAgents::setImage((int) ($_POST['staff_id'] ?? 0), (string) ($_POST['image'] ?? '')) ? 'saved' : 'image_bad';
+                break;
+            case 'agent_email':
+                $done = AiActionsAgents::setEmail((int) ($_POST['staff_id'] ?? 0), (string) ($_POST['email'] ?? '')) ?: 'saved';
                 break;
             default:
                 if (class_exists('AiActionsRules')) {
@@ -112,7 +115,11 @@ final class AiActionsAdmin
             'saved'         => 'Saved.',
             'deleted'       => 'Deleted.',
             'undone'        => 'Undone.',
+            'agent_email'   => 'osTicket refused the email address: it must be valid, not one of the help desk\'s own addresses and not used by another agent.',
             'image_bad'     => 'Picture not saved: use an https:// address or a path on this server, e.g. /images/bot.png.',
+            'email_bad'     => 'Email address not saved: it isn\'t a valid address.',
+            'email_system'  => 'Email address not saved: it is one of the help desk\'s own addresses (Emails). osTicket would fetch its own alerts and file mail from it under the AI agent. Use a mailbox osTicket doesn\'t fetch.',
+            'email_taken'   => 'Email address not saved: another agent already uses it. For several AI agents on one team mailbox, use plus addresses (team+triage@…), if your mail server supports them.',
             'error'         => 'That didn\'t work.',
         );
         return $map[$code] ?? 'Saved.';
@@ -138,19 +145,26 @@ final class AiActionsAdmin
                 self::e($a['image'])) : '')
                 . self::form('agent_image', sprintf('<input type="hidden" name="staff_id" value="%d"><input name="image" size="28" maxlength="500" value="%s" placeholder="https://… or /path.png"> <input type="submit" class="button" value="Save">',
                     (int) $a['staff_id'], self::e($a['image'])), 'spa-inline');
-            $rows .= sprintf('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
-                self::e($a['name']), self::e($a['dept']), self::e($a['model'] ?: 'plugin default'), $picture,
+            $email = self::form('agent_email', sprintf('<input type="hidden" name="staff_id" value="%d"><input type="email" name="email" size="28" maxlength="255" value="%s" required> <input type="submit" class="button" value="Save">',
+                (int) $a['staff_id'], self::e($a['email'])), 'spa-inline')
+                . (AiActionsAgents::reservedDomain($a['email']) ? ' <span class="error">refused by mail servers</span>' : '');
+            $rows .= sprintf('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
+                self::e($a['name']), self::e($a['dept']), $email, self::e($a['model'] ?: 'plugin default'), $picture,
                 $a['active'] ? 'active' : 'paused',
                 self::button($a['active'] ? 'agent_off' : 'agent_on', $a['active'] ? 'Pause' : 'Resume',
                     array('staff_id' => (string) $a['staff_id'])));
         }
         $out = '<h2>AI agents</h2><p class="faded">Agent accounts the AI works as. Assign tickets to them like to anyone; '
-            . 'rules decide what they do. Nobody can sign in with them. The picture shows in the ticket chat and at their thread entries.</p>';
-        $out .= '<table class="list" width="100%"><thead><tr><th>Name</th><th>Department</th><th>Model</th><th>Picture</th><th>State</th><th></th></tr></thead><tbody>'
-            . ($rows ?: '<tr><td colspan="6">No AI agents yet.</td></tr>') . '</tbody></table>';
+            . 'rules decide what they do. Nobody can sign in with them. The picture shows in the ticket chat and at their thread entries.</p>'
+            . '<p class="faded">osTicket sends AI agents its agent alerts (new ticket, assignment, …) like anyone else. '
+            . 'With SMTP, give them an address your mail server accepts, e.g. a team mailbox or an empty distribution list. '
+            . 'Not one of the help desk\'s own addresses: osTicket would fetch the alerts back.</p>';
+        $out .= '<table class="list" width="100%"><thead><tr><th>Name</th><th>Department</th><th>Email (alerts)</th><th>Model</th><th>Picture</th><th>State</th><th></th></tr></thead><tbody>'
+            . ($rows ?: '<tr><td colspan="7">No AI agents yet.</td></tr>') . '</tbody></table>';
 
         $depts = '';
-        foreach (Dept::getDepartments() as $id => $name) {
+        // osTicket refuses a new agent in a disabled or archived department.
+        foreach (Dept::getDepartments(array('activeonly' => true)) as $id => $name) {
             $depts .= sprintf('<option value="%d">%s</option>', (int) $id, self::e((string) $name));
         }
         $roles = '';
@@ -167,6 +181,8 @@ final class AiActionsAdmin
             . '<tr><td>Department</td><td><select name="dept_id">' . $depts . '</select></td></tr>'
             . '<tr><td>Role</td><td><select name="role_id">' . $roles . '</select> '
             . '<span class="faded">What the AI agent may do; it never gets more than this role.</span></td></tr>'
+            . '<tr><td>Email (alerts)</td><td><input type="email" name="email" size="30" maxlength="255" placeholder="team@your-domain"> '
+            . '<span class="faded">Optional. Empty: an @example.com address, fine without SMTP; with SMTP your mail server refuses it.</span></td></tr>'
             . '<tr><td>Model</td><td><select name="model">' . $models . '</select></td></tr>'
             . '<tr><td>Picture</td><td><input name="image" size="40" maxlength="500" placeholder="https://… or /path.png"> '
             . '<span class="faded">Optional. Square images look best; shown round.</span></td></tr>'
@@ -186,8 +202,17 @@ final class AiActionsAdmin
                 ? sprintf('<span class="error">Last cron run %d minutes ago. Rules wait until it runs again.</span>', intdiv($age, 60))
                 : sprintf('Last cron run %d seconds ago.', $age));
         $c = AiActionsJobs::counts();
+        $bad = AiActionsAgents::undeliverable();
+        $mail = $bad
+            ? sprintf('<span class="error">%s: %s. osTicket alerts AI agents; with SMTP the mail server refuses these addresses, '
+                . 'and osTicket 1.18 then fails the remaining mails of the same run (system log: "Cannot issue HELO to existing session"). '
+                . 'Set an address under AI agents.</span>',
+                count($bad) === 1 ? 'An AI agent has an address no mail server delivers to' : 'AI agents have addresses no mail server delivers to',
+                self::e(implode(', ', array_map(static function ($a) { return $a['name'] . ' <' . $a['email'] . '>'; }, $bad))))
+            : 'Every AI agent has a deliverable address.';
         return '<h2>Status</h2><table class="list" width="100%"><tbody>'
             . '<tr><td width="220">osTicket cron</td><td>' . $cron . '</td></tr>'
+            . '<tr><td>AI agents\' email</td><td>' . $mail . '</td></tr>'
             . sprintf('<tr><td>Jobs</td><td>%d queued, %d running, %d done, %d failed (last 30 days)</td></tr>',
                 $c['queued'], $c['running'], $c['done'], $c['failed'])
             . '<tr><td>Automatic work</td><td>' . ((AiActionsController::settings()['auto_paused'] ?? false)

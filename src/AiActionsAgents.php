@@ -17,9 +17,14 @@ declare(strict_types=1);
  *   3. auth.login.succeeded / auth.pwreset.login end the session at once,
  *      should a future osTicket version let one through.
  *
- * The email address is name@example.com (RFC 2606, never delivered), so
- * alerts to the AI agent go nowhere instead of into a real mailbox that
- * osTicket might fetch back as a ticket.
+ * osTicket alerts AI agents like any other agent (new ticket, assignment,
+ * …). A new AI agent gets name@example.com (RFC 2606). Without SMTP that is
+ * enough; with SMTP the server refuses the address, and osTicket 1.18 then
+ * fails every further mail of the same request ("Cannot issue HELO to
+ * existing session"). setEmail() gives it an address the mail server takes,
+ * e.g. a team mailbox osTicket doesn't fetch. Never a system email: osTicket
+ * would fetch its own alerts and file mail from that address under the AI
+ * agent.
  */
 final class AiActionsAgents
 {
@@ -70,18 +75,19 @@ final class AiActionsAgents
         return isset(self::$ids[$staffId]);
     }
 
-    /** @return array<int, array{staff_id:int, name:string, dept:string, persona:string, model:string, active:bool, image:string}> */
+    /** @return array<int, array{staff_id:int, name:string, email:string, dept:string, persona:string, model:string, active:bool, image:string}> */
     public static function all(): array
     {
         self::ensure();
         $out = array();
-        $res = db_query(sprintf('SELECT a.staff_id, a.persona, a.model, a.active, a.image, s.firstname, s.lastname, d.name AS dept
+        $res = db_query(sprintf('SELECT a.staff_id, a.persona, a.model, a.active, a.image, s.firstname, s.lastname, s.email, d.name AS dept
             FROM `%s` a JOIN `%s` s ON s.staff_id=a.staff_id LEFT JOIN `%s` d ON d.id=s.dept_id ORDER BY s.firstname',
             self::table(), STAFF_TABLE, DEPT_TABLE));
         while ($res && ($r = db_fetch_array($res))) {
             $out[] = array(
                 'staff_id' => (int) $r['staff_id'],
                 'name'     => trim($r['firstname'] . ' ' . $r['lastname']),
+                'email'    => (string) $r['email'],
                 'dept'     => (string) $r['dept'],
                 'persona'  => (string) $r['persona'],
                 'model'    => (string) $r['model'],
@@ -117,6 +123,59 @@ final class AiActionsAgents
         return true;
     }
 
+    /**
+     * Address for osTicket's alerts to the AI agent. The same checks as
+     * osTicket's agent form, and the record is changed field by field
+     * (Staff::update() would rebuild department access and permissions).
+     *
+     * @return string '' when saved, else email_bad, email_system or email_taken
+     */
+    public static function setEmail(int $staffId, string $email): string
+    {
+        $email = strtolower(trim($email));
+        if (!self::isAgent($staffId) || !($staff = Staff::lookup($staffId))
+            || strlen($email) > 255 || !Validator::is_valid_email($email)) {
+            return 'email_bad';
+        }
+        if (Email::getIdByEmail($email)) {
+            return 'email_system';
+        }
+        $other = Staff::getIdByEmail($email);
+        if ($other && (int) $other !== $staffId) {
+            return 'email_taken';
+        }
+        $staff->email = $email;
+        $staff->save();
+        return '';
+    }
+
+    /**
+     * Domains reserved by RFC 2606 / RFC 6761: no mail server delivers there,
+     * an SMTP server refuses them outright. Public for the unit tests.
+     */
+    public static function reservedDomain(string $email): bool
+    {
+        $domain = strtolower((string) substr((string) strrchr($email, '@'), 1));
+        if ($domain === '') {
+            return true;
+        }
+        foreach (array('example.com', 'example.net', 'example.org') as $d) {
+            if ($domain === $d || substr($domain, -strlen($d) - 1) === '.' . $d) {
+                return true;
+            }
+        }
+        $tld = (string) substr((string) strrchr('.' . $domain, '.'), 1);
+        return in_array($tld, array('example', 'invalid', 'test', 'localhost', 'local'), true);
+    }
+
+    /** AI agents whose address a mail server refuses. */
+    public static function undeliverable(): array
+    {
+        return array_values(array_filter(self::all(), static function ($a) {
+            return self::reservedDomain($a['email']);
+        }));
+    }
+
     /** Username and address for a name. Public for the unit tests. */
     public static function handle(string $name, string $suffix): array
     {
@@ -131,7 +190,7 @@ final class AiActionsAgents
      *
      * @return array{id:int, errors:array}
      */
-    public static function create(string $name, int $deptId, int $roleId, string $persona, string $model, string $image = ''): array
+    public static function create(string $name, int $deptId, int $roleId, string $persona, string $model, string $image = '', string $email = ''): array
     {
         self::ensure();
         $name = AiActionsController::cleanName($name, '');
@@ -149,7 +208,8 @@ final class AiActionsAgents
             'firstname' => $parts[0],
             'lastname'  => $parts[1] ?? 'AI',
             'username'  => $handle['username'],
-            'email'     => $handle['email'],
+            // Staff::update() checks a given address like the agent form: valid, no system email, not taken.
+            'email'     => strtolower(trim($email)) ?: $handle['email'],
             'dept_id'   => $deptId,
             'role_id'   => $roleId,
             'backend'   => self::BACKEND,
