@@ -18,8 +18,12 @@ final class AiActionsExecutor
      * @param bool $assignedInRun an earlier change of the same plan assigned the ticket
      * @return array{ok:bool, error?:string, message?:string, previous?:mixed}
      */
-    /** @param bool $ruleSend a rule allowed send_reply (its send guard passed); replaces the chat's setting */
-    public static function run($ticket, $staff, string $action, array $input, bool $assignedInRun = false, bool $ruleSend = false): array
+    /**
+     * @param bool $ruleSend a rule allowed send_reply (its send guard passed); replaces the chat's setting
+     * @param bool $alert osTicket's assignment alert; an automatic run sends its own after its note
+     */
+    public static function run($ticket, $staff, string $action, array $input, bool $assignedInRun = false, bool $ruleSend = false,
+                               bool $alert = true): array
     {
         $value = (string) (AiActionsTools::choiceValue($action, $input) ?? '');
         switch ($action) {
@@ -29,7 +33,7 @@ final class AiActionsExecutor
                 return self::priority($ticket, $staff, $value);
             case 'assign_agent':
             case 'assign_team':
-                return self::assign($ticket, $staff, $action === 'assign_agent' ? 'agents' : 'teams', $value);
+                return self::assign($ticket, $staff, $action === 'assign_agent' ? 'agents' : 'teams', $value, $alert);
             case 'transfer':
                 return self::transfer($ticket, $staff, $value);
             case 'set_status':
@@ -384,7 +388,7 @@ final class AiActionsExecutor
     }
 
     /** TicketsAjaxAPI::assign() */
-    private static function assign($ticket, $staff, string $target, string $value): array
+    private static function assign($ticket, $staff, string $target, string $value, bool $alert = true): array
     {
         if (!$ticket->checkStaffPerm($staff, Ticket::PERM_ASSIGN)) {
             return self::fail('forbidden');
@@ -407,7 +411,7 @@ final class AiActionsExecutor
 
         $form = $ticket->getAssignmentForm(array('assignee' => array($value), 'comments' => ''), array('target' => $target));
         $errors = array();
-        if (!$form || !$form->isValid() || !$ticket->assign($form, $errors)) {
+        if (!$form || !$form->isValid() || !$ticket->assign($form, $errors, $alert)) {
             return self::fail('rejected', $errors ?: ($form ? $form->errors() : array()));
         }
         return array('ok' => true, 'previous' => $previous);
@@ -482,6 +486,34 @@ final class AiActionsExecutor
         $status = TicketStatus::lookup((int) $value);
         return array('ok' => true, 'unchanged' => true, 'previous' => (int) $value,
                      'value' => $status ? (string) $status->getLocalName() : $value);
+    }
+
+    /**
+     * An assign_agent/assign_team to whoever already has the ticket. The
+     * core's assignment lists leave the current assignee out, so the checks
+     * would refuse it; it is "unchanged" instead. Null for anything else.
+     *
+     * @param mixed $input
+     * @return array{ok:bool, unchanged:bool, value:string}|null
+     */
+    public static function sameAssignee($ticket, string $action, $input): ?array
+    {
+        $key = $action === 'assign_agent' ? 'agent' : ($action === 'assign_team' ? 'team' : '');
+        $value = $key !== '' && is_array($input) && is_string($input[$key] ?? null) ? trim($input[$key]) : '';
+        if ($key === 'agent' && preg_match('/^s([1-9]\d{0,9})$/', $value, $m) && (int) $m[1] === (int) $ticket->getStaffId()) {
+            $who = $ticket->getStaff();
+        } elseif ($key === 'team' && preg_match('/^t([1-9]\d{0,9})$/', $value, $m) && (int) $m[1] === (int) $ticket->getTeamId()) {
+            $who = $ticket->getTeam();
+        } else {
+            return null;
+        }
+        return array('ok' => true, 'unchanged' => true, 'value' => $who ? (string) $who->getName() : $value);
+    }
+
+    /** sameStatus() or sameAssignee(): a change to what the ticket already has. */
+    public static function same($ticket, string $action, $input): ?array
+    {
+        return self::sameStatus($ticket, $action, $input) ?? self::sameAssignee($ticket, $action, $input);
     }
 
     /** Is $value a key of a (possibly grouped) core choice list? */

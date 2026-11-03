@@ -1044,6 +1044,48 @@ check('web_fetch: setting parsed like the link domains',
     AiActionsController::normalise(array('fetch_domains' => "https://www.Example.com/\nnot_a domain\napi.wordpress.org"))['fetch_domains']
         === array('example.com', 'api.wordpress.org') && AiActionsController::normalise(array())['fetch_domains'] === array());
 check('web_fetch: the system prompt treats fetched pages as data', strpos(AiActionsPlanner::system(array()), 'web_fetch') !== false);
+$plugin = file_get_contents($dir . '/class.AiActionsPlugin.php');
+check('web_fetch: bootstrap hands the domains setting over', strpos($plugin, "'fetch_domains' => \$config->get('fetch_domains')") !== false);
+
+// ------------------------------------------------------ one mail per ticket (0.7.0)
+
+$assigned = array('action' => 'assign_agent', 'ok' => true, 'unchanged' => false);
+check('notify: an open ticket the run assigned mails the agent', AiActionsNotify::wouldMail(array($assigned), true, false) === 'agent');
+check('notify: closed by the run → no mail', AiActionsNotify::wouldMail(array($assigned), false, false) === '');
+check('notify: hung under a lead ticket → no mail', AiActionsNotify::wouldMail(array($assigned), true, true) === '');
+check('notify: already assigned (unchanged) → no mail', AiActionsNotify::wouldMail(array(array('unchanged' => true) + $assigned), true, false) === '');
+check('notify: failed assignment → no mail', AiActionsNotify::wouldMail(array(array('ok' => false) + $assigned), true, false) === '');
+check('notify: team only → the team', AiActionsNotify::wouldMail(array(array('action' => 'assign_team') + $assigned), true, false) === 'team');
+check('notify: agent and team → the agent, once', AiActionsNotify::wouldMail(array(array('action' => 'assign_team') + $assigned, $assigned), true, false) === 'agent');
+check('notify: note text becomes escaped HTML with line breaks',
+    AiActionsNotify::html("Klasse: <b>WORK</b>\nNächster Schritt") === 'Klasse: &lt;b&gt;WORK&lt;/b&gt;<br>' . "\n" . 'Nächster Schritt');
+$de = AiActionsI18n::strings('de');
+$fb = AiActionsNotify::fallbackText($de, 'failed:rate_limited', '');
+check('fallback: says why, with the error', strpos($fb, 'nicht zugewiesen: Lauf fehlgeschlagen (rate_limited)') !== false, $fb);
+$fb = AiActionsNotify::fallbackText($de, 'not_assigned', 'Klasse: SPAM');
+check('fallback: carries the AI answer when there is one', strpos($fb, "Antwort der KI:\nKlasse: SPAM") !== false, $fb);
+check('fallback: English strings too', strpos(AiActionsNotify::fallbackText(AiActionsI18n::strings('en'), 'no_rule', ''), 'no rule matched') !== false);
+$s = AiActionsController::normalise(array());
+check('settings: a single choice may come back as an int', AiActionsController::normalise(array('notify_agent' => 4))['notify_agent'] === 4);
+check('settings: fallback on, 10 minutes, summary off by default', $s['fallback_on'] && $s['fallback_minutes'] === 10
+    && !$s['digest_on'] && $s['digest_day'] === 1 && $s['digest_hour'] === 8 && $s['notify_agent'] === 0);
+$s = AiActionsController::normalise(array('fallback_on' => false, 'fallback_minutes' => '2', 'notify_agent' => '{"7":"Jo"}',
+    'digest_on' => '1', 'digest_day' => '{"5":"Friday"}', 'digest_hour' => '30'));
+check('settings: fallback off, wait and hour clamped, agent and day from choice JSON',
+    !$s['fallback_on'] && $s['fallback_minutes'] === 5 && $s['notify_agent'] === 7 && $s['digest_on'] && $s['digest_day'] === 5
+    && $s['digest_hour'] === 23, json_encode($s));
+$mon = new DateTime('2026-11-09 08:30', new DateTimeZone('Europe/Berlin'));
+check('digest: due on the day from the hour', AiActionsNotify::digestDue($mon, 1, 8, 0));
+check('digest: not before the hour', !AiActionsNotify::digestDue(new DateTime('2026-11-09 07:59', new DateTimeZone('Europe/Berlin')), 1, 8, 0));
+check('digest: not twice in a week', !AiActionsNotify::digestDue($mon, 1, 8, $mon->getTimestamp() - 3600));
+check('digest: not on another day', !AiActionsNotify::digestDue($mon, 2, 8, 0));
+[$subj, $body] = AiActionsNotify::digestMail(array(
+    array('kind' => 'closed', 'number' => '005900', 'id' => 9, 'subject' => '<Alert>', 'what' => 'Status: Geschlossen', 'when' => '2026-11-08 10:00:00'),
+    array('kind' => 'fallback', 'number' => '005901', 'id' => 10, 'subject' => 'Frage', 'what' => 'failed:exception', 'when' => '2026-11-08 11:00:00'),
+), $de, 'Europe/Berlin');
+check('digest: counts in the subject', strpos($subj, '1 still erledigt, 1 ohne KI zugewiesen, 0 Fehler') !== false, $subj);
+check('digest: rows escaped, reasons readable', strpos($body, '&lt;Alert&gt;') !== false && strpos($body, 'Lauf fehlgeschlagen (exception)') !== false
+    && strpos($body, '<Alert>') === false);
 
 echo "\n$count checks, $failures failed\n";
 exit($failures ? 1 : 0);

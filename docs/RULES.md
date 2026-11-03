@@ -47,6 +47,24 @@ A ticket that is closed by the time the cron gets to it (for example by one of o
 - **Follow-up date:** a status such as "Follow-up" plus a due date as the date to look again; both are existing actions, the task says when to use them.
 - **Never closed automatically:** tickets with priority High or Emergency, whatever the task says.
 
+## One mail per new ticket (0.7.0)
+
+osTicket alerts at once when a ticket arrives, before any AI agent has looked at it: *New ticket*, and *assigned* if a ticket filter assigns. With an automatic triage rule, set it up so the only mail comes after the run:
+
+1. Admin → Settings → Alerts and Notices: switch **New Ticket Alert** off. Keep **Ticket Assignment Alert** on: agents still get it when someone assigns by hand.
+2. Admin → Filters: remove *Assign to* from filters that match new tickets. Let the rule's AI agent assign instead (allowed action *Assign to agent* or *Assign to team*).
+3. Admin → Emails → Templates → *Ticket Assignment Alert*: put `%{comments}` near the top. In an automatic run it holds the AI agent's note: assessment, next step, changes.
+4. AI Actions settings → *Mail about new tickets*: choose the agent for unassigned tickets. Keep *Assign when the AI didn't* on, so a ticket no rule handled, or a failed run, still reaches someone.
+
+What happens then:
+
+| The run … | Mail |
+|---|---|
+| assigns an agent | one assignment alert to the agent, with the note |
+| assigns a team | the alert to the team's members (or its lead), per osTicket's settings |
+| closes the ticket or hangs it under a lead ticket | none; it shows in the log and the weekly summary |
+| doesn't assign, fails, or doesn't run | after the wait, the fallback assigns with osTicket's alert and the reason |
+
 ## Automatic replies and the send guard
 
 A reply an AI agent sends on its own goes out only if every check passes. Otherwise it is held back: an internal note "AI reply held back" with the draft and the reasons, nothing sent.

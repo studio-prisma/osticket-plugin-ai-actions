@@ -49,11 +49,12 @@ require_once __DIR__ . '/src/AiActionsAdminTools.php';
 require_once __DIR__ . '/src/AiActionsRules.php';
 require_once __DIR__ . '/src/AiActionsGuard.php';
 require_once __DIR__ . '/src/AiActionsAutomation.php';
+require_once __DIR__ . '/src/AiActionsNotify.php';
 
 class AiActionsPlugin extends Plugin
 {
     /** Mirrors plugin.php; used for cache-busting the asset URLs only. */
-    public const VERSION = '0.6.0';
+    public const VERSION = '0.7.0';
 
     /** Route base, relative to ROOT_PATH. */
     public const STAFF_BASE = 'scp/ajax.php/ai';
@@ -102,6 +103,13 @@ class AiActionsPlugin extends Plugin
             'ai_notice_text' => $config->get('ai_notice_text'),
             'link_domains' => $config->get('link_domains'),
             'auto_per_hour' => $config->get('auto_per_hour'),
+            'fetch_domains' => $config->get('fetch_domains'),
+            'fallback_on'      => $config->get('fallback_on'),
+            'fallback_minutes' => $config->get('fallback_minutes'),
+            'notify_agent'     => $config->get('notify_agent'),
+            'digest_on'        => $config->get('digest_on'),
+            'digest_day'       => $config->get('digest_day'),
+            'digest_hour'      => $config->get('digest_hour'),
         ), static function () use ($config) {
             // PluginConfig decrypts PasswordField values when it loads.
             $v = $config->get('key_stored');
@@ -134,6 +142,7 @@ class AiActionsPlugin extends Plugin
         Signal::connect('cron', static function () {
             AiActionsRules::schedule();
             AiActionsJobs::cron();
+            AiActionsNotify::cron();
         });
         // Rule triggers only queue work; the cron does it.
         Signal::connect('ticket.created', static function ($ticket) {
