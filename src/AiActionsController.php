@@ -33,7 +33,9 @@ final class AiActionsController
                                      'name' => '', 'icon' => 'sparkles', 'image' => '', 'accent' => '', 'welcome' => '',
                                      'allow_send' => false, 'auto_paused' => false, 'ai_notice' => true,
                                      'ai_notice_text' => 'This reply was written by our AI assistant.', 'link_domains' => array(),
-                                     'auto_per_hour' => 20, 'fetch_domains' => array());
+                                     'auto_per_hour' => 20, 'fetch_domains' => array(), 'fallback_on' => true,
+                                     'fallback_minutes' => 10, 'notify_agent' => 0, 'digest_on' => false, 'digest_day' => 1,
+                                     'digest_hour' => 8);
 
     /** Icons for the bubble and the window header; "image" uses the image setting. */
     public const ICONS = array('sparkles', 'robot', 'chat', 'bulb', 'bolt', 'initial', 'image');
@@ -87,6 +89,15 @@ final class AiActionsController
             'link_domains' => self::domains($raw['link_domains'] ?? ''),
             'auto_per_hour' => self::number($raw['auto_per_hour'] ?? null, 20, 1, 1000),
             'fetch_domains' => self::domains($raw['fetch_domains'] ?? ''),
+            // On unless switched off: without it a new ticket nobody got would mail nobody.
+            'fallback_on'      => !array_key_exists('fallback_on', $raw) || $raw['fallback_on'] === null || !empty($raw['fallback_on']),
+            'fallback_minutes' => self::number($raw['fallback_minutes'] ?? null, 10, 5, 1440),
+            // PluginConfig hands a single choice back as its key (an int), the form as JSON.
+            'notify_agent'     => is_int($raw['notify_agent'] ?? null) ? max(0, $raw['notify_agent'])
+                : (int) (self::keyList($raw['notify_agent'] ?? null, '/^[1-9]\d{0,9}$/')[0] ?? 0),
+            'digest_on'        => !empty($raw['digest_on']),
+            'digest_day'       => (int) (self::keyList($raw['digest_day'] ?? null, '/^[1-7]$/')[0] ?? 1),
+            'digest_hour'      => self::number($raw['digest_hour'] ?? null, 8, 0, 23),
         );
     }
 
@@ -333,10 +344,10 @@ final class AiActionsController
             // ticket or the agent's rights may have changed since the plan.
             $choices = AiActionsChoices::forTicket($ticket, $thisstaff);
             $input = AiActionsTools::validate((string) ($c['action'] ?? ''), $c['input'] ?? null, $choices);
-            $same = $input === null ? AiActionsExecutor::sameStatus($ticket, (string) ($c['action'] ?? ''), $c['input'] ?? null) : null;
+            $same = $input === null ? AiActionsExecutor::same($ticket, (string) ($c['action'] ?? ''), $c['input'] ?? null) : null;
             $line = $input !== null
                 ? AiActionsTools::summary($c['action'], $input, $t, $choices)
-                : ($same ? array('label' => $t['labels']['set_status'], 'value' => $same['value'])
+                : ($same ? array('label' => $t['labels'][(string) ($c['action'] ?? '')] ?? '', 'value' => $same['value'])
                          : AiActionsTools::rejectedLine((string) ($c['action'] ?? ''), $c['input'] ?? null, $t));
             $r = $input !== null
                 ? AiActionsExecutor::run($ticket, $thisstaff, $c['action'], $input, $assigned)

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-03
+
+### Added
+
+- **One mail per new ticket, after the AI agent.** An automatic run assigns without osTicket's alert; once its note is posted, the assignee (or the team's members) gets osTicket's own *assigned* alert, with the note as the template's `%{comments}`: the AI agent's assessment, next step and every change, and the ticket in its final state. Tickets the run closes or hangs under a lead ticket stay quiet. Meant for help desks that switch osTicket's *New ticket* alert off and stop assigning in ticket filters ([RULES](docs/RULES.md#one-mail-per-new-ticket-070)).
+- **Assign when the AI didn't** (new setting, on by default): a new ticket still unassigned after *Wait (minutes)* (default 10) goes to the agent set under *Agent for these tickets and the summary* (empty: the department's manager), with osTicket's assignment alert saying why: no rule matched, run failed, limit, automatic work paused, a proposal waits, or the AI assigned nobody (then with its answer). Only tickets that arrive after the setting is first active, at most one day old, once per ticket.
+- **Weekly summary** (new setting, off by default): weekday and hour in that agent's time zone; tickets AI agents closed or hung under a lead ticket without a mail, fallback assignments and failed runs of the last 7 days, each with a link.
+
+### Fixed
+
+- An assignment to whoever already has the ticket was logged as refused ("failed (rejected)" in the run's note): osTicket's assignment lists leave the current assignee out. It counts as unchanged now, like a status the ticket already has.
+- *Pages the assistant may read* had no effect: the setting was saved but not handed to the assistant, so `web_fetch` stayed off.
+- The note of an automatic run no longer triggers osTicket's *new internal note* alert; the assignment alert carries it.
+
 ## [0.6.0] - 2026-11-02
 
 ### Added

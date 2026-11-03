@@ -96,6 +96,58 @@ class AiActionsConfig extends PluginConfig
                 'configuration' => array('size' => 6, 'length' => 4, 'validator' => 'number'),
             )),
 
+            'sec_notify' => new SectionBreakField(array(
+                'label' => 'Mail about new tickets',
+            )),
+
+            'fallback_on' => new BooleanField(array(
+                'label'         => 'Assign when the AI didn\'t',
+                'default'       => true,
+                'configuration' => array(
+                    'desc' => 'A new ticket that is still unassigned after the wait below (no rule, failed run, limit, '
+                            . 'proposal waiting, AI left it unassigned) goes to the agent below, with osTicket\'s '
+                            . 'assignment alert saying why. Needed when osTicket\'s "New ticket" alert is off.',
+                ),
+            )),
+
+            'fallback_minutes' => new TextboxField(array(
+                'label'         => 'Wait (minutes)',
+                'default'       => '10',
+                'hint'          => '5 to 1440. The cron must run at least this often.',
+                'configuration' => array('size' => 6, 'length' => 4, 'validator' => 'number'),
+            )),
+
+            'notify_agent' => new ChoiceField(array(
+                'label'   => 'Agent for these tickets and the summary',
+                'default' => '',
+                'choices' => self::agents(),
+                'hint'    => 'Nobody selected: the department\'s manager.',
+                'configuration' => array('prompt' => 'Department manager'),
+            )),
+
+            'digest_on' => new BooleanField(array(
+                'label'         => 'Weekly summary',
+                'default'       => false,
+                'configuration' => array(
+                    'desc' => 'Once a week, a mail to the agent above: tickets AI agents closed or hung under a lead '
+                            . 'ticket without a mail, fallback assignments, failed runs.',
+                ),
+            )),
+
+            'digest_day' => new ChoiceField(array(
+                'label'   => 'Summary on',
+                'default' => '1',
+                'choices' => array('1' => 'Monday', '2' => 'Tuesday', '3' => 'Wednesday', '4' => 'Thursday',
+                                   '5' => 'Friday', '6' => 'Saturday', '7' => 'Sunday'),
+            )),
+
+            'digest_hour' => new TextboxField(array(
+                'label'         => 'Summary from (hour)',
+                'default'       => '8',
+                'hint'          => '0 to 23, in that agent\'s time zone.',
+                'configuration' => array('size' => 4, 'length' => 2, 'validator' => 'number'),
+            )),
+
             'sec_api' => new SectionBreakField(array(
                 'label' => 'Claude API',
             )),
@@ -302,6 +354,22 @@ class AiActionsConfig extends PluginConfig
         }
         $config['key_stored_clear'] = false;
         return true;
+    }
+
+    /** @return array<int, string> active human agents, staff ID => name */
+    private static function agents(): array
+    {
+        $out = array();
+        if (!class_exists('Staff')) {
+            return $out;
+        }
+        foreach (Staff::objects()->filter(array('isactive' => 1))->order_by('firstname') as $s) {
+            if (class_exists('AiActionsAgents') && AiActionsAgents::isAgent((int) $s->getId())) {
+                continue;
+            }
+            $out[(int) $s->getId()] = (string) $s->getName();
+        }
+        return $out;
     }
 
     /** @return array<int, string> role ID => name */

@@ -164,9 +164,9 @@ final class AiActionsAutomation
         foreach ($plan['changes'] as $c) {
             $choices = AiActionsChoices::forTicket($ticket, $agent, in_array('send_reply', $rule['actions'], true));
             $input = AiActionsTools::validate($c['action'], $c['input'], $choices);
-            $same = $input === null ? AiActionsExecutor::sameStatus($ticket, $c['action'], $c['input']) : null;
+            $same = $input === null ? AiActionsExecutor::same($ticket, $c['action'], $c['input']) : null;
             $line = $input !== null ? AiActionsTools::summary($c['action'], $input, $t, $choices)
-                : ($same ? array('label' => $t['labels']['set_status'], 'value' => $same['value'])
+                : ($same ? array('label' => $t['labels'][(string) ($c['action'] ?? '')] ?? '', 'value' => $same['value'])
                          : AiActionsTools::rejectedLine($c['action'], $c['input'], $t));
             if ($same) {
                 $r = $same;
@@ -194,7 +194,8 @@ final class AiActionsAutomation
                     ), $errors, $agent);
                 }
             } else {
-                $r = AiActionsExecutor::run($ticket, $agent, $c['action'], $input, $assigned);
+                // No assignment alert yet: it goes out once below, with the run's note.
+                $r = AiActionsExecutor::run($ticket, $agent, $c['action'], $input, $assigned, false, false);
             }
             $assigned = $assigned || ($r['ok'] && in_array($c['action'], array('assign_agent', 'assign_team'), true));
             $results[] = $line + array('ok' => $r['ok'], 'error' => $r['error'] ?? null, 'action' => $c['action'],
@@ -203,12 +204,14 @@ final class AiActionsAutomation
             AiActionsExtensions::bind($ticket, $agent);
         }
         $errors = array();
-        $ticket->postNote(array(
+        $text = self::runNote($notes, $results, $t);
+        $note = $ticket->postNote(array(
             'title' => sprintf('AI action (automatic, %s, rule "%s")', (string) $agent->getName(), $rule['name']),
-            'note'  => new TextThreadEntryBody(self::runNote($notes, $results, $t)),
-        ), $errors, $agent);
+            'note'  => new TextThreadEntryBody($text),
+        ), $errors, $agent, false);
         self::attribute($ticket, $since, $agent);
         self::log($rule, $ticket, $agent, 'auto', $plan['answer'], $results, $guard, $sent, $plan['tokens']);
+        AiActionsNotify::afterRun(Ticket::lookup($ticket->getId()), $results, $text, $note ?: null);
     }
 
     /**
@@ -296,6 +299,14 @@ final class AiActionsAutomation
             VALUES (%d, %d, %d, '%s', %s, %s, %s, %d, %d, NOW())", self::logTable(), (int) $rule['id'], (int) $ticket->getId(),
             (int) $agent->getId(), $mode, self::quote($answer), self::quote(json_encode($results)), self::quote(json_encode($guard)),
             $sent ? 1 : 0, $tokens));
+    }
+
+    /** A run of the plugin itself, without a rule (fallback assignment): for the log and the weekly summary. */
+    public static function logSystem(int $ticketId, int $staffId, string $mode, string $answer): void
+    {
+        self::ensure();
+        db_query(sprintf("INSERT INTO `%s` (rule_id, ticket_id, agent_id, mode, answer, results, guard, sent, tokens, created)
+            VALUES (0, %d, %d, %s, %s, '[]', '[]', 0, 0, NOW())", self::logTable(), $ticketId, $staffId, self::quote($mode), self::quote($answer)));
     }
 
     /** A settings change from the admin chat, for the log (24-hour undo there). */
@@ -484,9 +495,9 @@ final class AiActionsAutomation
         foreach ((array) json_decode((string) ($row['changes'] ?? '[]'), true) as $c) {
             $choices = AiActionsChoices::forTicket($ticket, $staff);
             $input = AiActionsTools::validate((string) ($c['action'] ?? ''), $c['input'] ?? null, $choices);
-            $same = $input === null ? AiActionsExecutor::sameStatus($ticket, (string) ($c['action'] ?? ''), $c['input'] ?? null) : null;
+            $same = $input === null ? AiActionsExecutor::same($ticket, (string) ($c['action'] ?? ''), $c['input'] ?? null) : null;
             $line = $input !== null ? AiActionsTools::summary($c['action'], $input, $t, $choices)
-                : ($same ? array('label' => $t['labels']['set_status'], 'value' => $same['value'])
+                : ($same ? array('label' => $t['labels'][(string) ($c['action'] ?? '')] ?? '', 'value' => $same['value'])
                          : AiActionsTools::rejectedLine((string) ($c['action'] ?? ''), $c['input'] ?? null, $t));
             $r = $input !== null ? AiActionsExecutor::run($ticket, $staff, $c['action'], $input, $assigned)
                 : ($same ?: array('ok' => false, 'error' => 'rejected'));
@@ -525,6 +536,8 @@ final class AiActionsAutomation
             }
             if ($r['mode'] === 'skip') {
                 $parts[] = '– skipped: ticket ' . (string) $r['answer'];
+            } elseif ($r['mode'] === 'fallback') {
+                $parts[] = '→ assigned without AI: ' . (string) $r['answer'];
             }
             $guard = (array) json_decode((string) $r['guard'], true);
             $undo = in_array($r['mode'], array('auto', 'admin'), true) && !$r['undone'] && strtotime($r['created']) > time() - self::UNDO_HOURS * 3600
@@ -532,7 +545,7 @@ final class AiActionsAutomation
             $rows .= sprintf('<tr><td>%s</td><td><a href="%s">#%s</a></td><td>%s</td><td>%s</td><td>%s</td><td>%s%s</td><td>%d</td><td>%s</td></tr>',
                 call_user_func($e, AiActionsTime::fromDb((string) $r['created'], AiActionsTime::dbZone(), AiActionsTime::zone($GLOBALS['thisstaff'] ?? null)) ?: (string) $r['created']), call_user_func($e, ROOT_PATH . 'scp/tickets.php?id=' . (int) $r['ticket_id']),
                 call_user_func($e, $r['mode'] === 'admin' ? 'settings' : (string) $r['number']),
-                call_user_func($e, $r['mode'] === 'admin' ? 'admin chat' : ($rule ? $rule['name'] : '#' . $r['rule_id'])),
+                call_user_func($e, $r['mode'] === 'admin' ? 'admin chat' : ($rule ? $rule['name'] : ($r['mode'] === 'fallback' ? 'fallback' : '#' . $r['rule_id']))),
                 call_user_func($e, trim($r['firstname'] . ' ' . $r['lastname'])), call_user_func($e, (string) $r['mode']),
                 nl2br(call_user_func($e, implode("\n", $parts))),
                 $guard ? '<br><span class="faded">send guard: ' . call_user_func($e, !empty($guard['ok']) ? 'ok' : implode(', ', (array) ($guard['reasons'] ?? array()))) . '</span>' : '',
