@@ -8,8 +8,8 @@ declare(strict_types=1);
  *   afterRun   An automatic run assigns without osTicket's alert. Once its
  *              note is posted, the assignee gets osTicket's own "assigned"
  *              alert, with the note as its comments: final status, the AI
- *              agent's assessment, what changed. Tickets the run closed or
- *              hung under a lead ticket stay quiet.
+ *              agent's assessment, what changed. Tickets the run closed
+ *              stay quiet, also when it hung them under a lead ticket.
  *   fallback   In the cron: a new ticket nobody got after `fallback_minutes`
  *              (no rule, failed run, limit, proposal mode, AI didn't assign)
  *              goes to the notify agent, through the core's assignment with
@@ -62,16 +62,23 @@ final class AiActionsNotify
         return $team ? ($ticket->getTeam() ?: null) : null;
     }
 
-    /** Closed, or a sub-ticket of a lead ticket: settled, no mail. */
+    /**
+     * Closed: settled, no mail. A sub-ticket that is still open is not
+     * settled: the AI agent may have hung a new, related request under an
+     * older lead ticket, and someone has to work on it.
+     */
     private static function quiet($ticket): bool
     {
-        return !$ticket->isOpen() || (int) $ticket->getPid() > 0;
+        return !$ticket->isOpen();
     }
 
-    /** What afterRun() decides for a run, without a ticket: '' (no mail), 'agent' or 'team'. Public for the unit tests. */
+    /**
+     * What afterRun() decides for a run, without a ticket: '' (no mail), 'agent' or 'team'.
+     * $child no longer matters: an open sub-ticket mails like any open ticket. Public for the unit tests.
+     */
     public static function wouldMail(array $results, bool $open, bool $child): string
     {
-        if (!$open || $child) {
+        if (!$open) {
             return '';
         }
         $done = array();
@@ -279,8 +286,9 @@ final class AiActionsNotify
             if ($r['mode'] === 'fallback') {
                 $kind = 'fallback';
                 $what = (string) $r['answer'];
-            } elseif ($r['state'] === 'closed' || (int) $r['ticket_pid'] > 0) {
-                $kind = $r['state'] === 'closed' ? 'closed' : 'linked';
+            } elseif ($r['state'] === 'closed') {
+                // Settled without a mail; open sub-tickets got the assigned alert.
+                $kind = (int) $r['ticket_pid'] > 0 ? 'linked' : 'closed';
                 $parts = array();
                 foreach ((array) json_decode((string) $r['results'], true) as $x) {
                     if (!empty($x['ok']) && empty($x['unchanged'])) {

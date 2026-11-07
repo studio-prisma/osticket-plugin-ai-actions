@@ -1052,7 +1052,8 @@ check('web_fetch: bootstrap hands the domains setting over', strpos($plugin, "'f
 $assigned = array('action' => 'assign_agent', 'ok' => true, 'unchanged' => false);
 check('notify: an open ticket the run assigned mails the agent', AiActionsNotify::wouldMail(array($assigned), true, false) === 'agent');
 check('notify: closed by the run → no mail', AiActionsNotify::wouldMail(array($assigned), false, false) === '');
-check('notify: hung under a lead ticket → no mail', AiActionsNotify::wouldMail(array($assigned), true, true) === '');
+check('notify: hung under a lead ticket but still open → mails the agent', AiActionsNotify::wouldMail(array($assigned), true, true) === 'agent');
+check('notify: hung under a lead ticket and closed → no mail', AiActionsNotify::wouldMail(array($assigned), false, true) === '');
 check('notify: already assigned (unchanged) → no mail', AiActionsNotify::wouldMail(array(array('unchanged' => true) + $assigned), true, false) === '');
 check('notify: failed assignment → no mail', AiActionsNotify::wouldMail(array(array('ok' => false) + $assigned), true, false) === '');
 check('notify: team only → the team', AiActionsNotify::wouldMail(array(array('action' => 'assign_team') + $assigned), true, false) === 'team');

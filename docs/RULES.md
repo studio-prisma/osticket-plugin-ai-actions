@@ -62,7 +62,8 @@ What happens then:
 |---|---|
 | assigns an agent | one assignment alert to the agent, with the note |
 | assigns a team | the alert to the team's members (or its lead), per osTicket's settings |
-| closes the ticket or hangs it under a lead ticket | none; it shows in the log and the weekly summary |
+| closes the ticket (also when it hangs it under a lead ticket) | none; it shows in the log and the weekly summary |
+| hangs it under a lead ticket and leaves it open | the assignment alert as above: a related new request still needs someone (0.7.1) |
 | doesn't assign, fails, or doesn't run | after the wait, the fallback assigns with osTicket's alert and the reason |
 
 ## Automatic replies and the send guard
