@@ -115,6 +115,25 @@ test('AI closes the ticket: no mail at all', async ({ request }) => {
   expect(await mails(request, id)).toHaveLength(0);
 });
 
+// 0.7.1: a related new request hung under an older lead ticket is not settled.
+test('AI hangs it under a lead ticket and leaves it open: the assignee still gets the one mail', async ({ request }) => {
+  const lead = newTicket('Mail lead', 'First request');
+  expect(lead).toBeGreaterThan(0);
+  rule('Related', { trigger: 'new_ticket', task: 'philipp and the parent', mode: 'auto',
+    actions: ['assign_agent', 'link_parent'] });
+  const id = newTicket('Mail related', 'Second, different request');
+  await clearMail(request);
+  cron();
+
+  expect(Number(sql(`SELECT ticket_pid FROM ost_ticket WHERE ticket_id=${id}`))).toBeGreaterThan(0);
+  expect(sql(`SELECT s.state FROM ost_ticket t JOIN ost_ticket_status s ON s.id=t.status_id WHERE t.ticket_id=${id}`)).toBe('open');
+  const who = assignee(id);
+  expect(who).toBeGreaterThan(0);
+  const got = await mails(request, id);
+  expect(got).toHaveLength(1);
+  expect(got[0].to).toEqual([email(who).toLowerCase()]);
+});
+
 test('assigning to whoever has it already counts as done, not as refused', () => {
   rule('Same agent', { trigger: 'new_ticket', task: 'philipp', mode: 'auto', actions: ['assign_agent'] });
   const id = newTicket('Already Philipp', 'Hello');

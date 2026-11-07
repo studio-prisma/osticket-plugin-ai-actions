@@ -129,8 +129,8 @@ class AiActionsConfig extends PluginConfig
                 'label'         => 'Weekly summary',
                 'default'       => false,
                 'configuration' => array(
-                    'desc' => 'Once a week, a mail to the agent above: tickets AI agents closed or hung under a lead '
-                            . 'ticket without a mail, fallback assignments, failed runs.',
+                    'desc' => 'Once a week, a mail to the agent above: tickets AI agents closed without a mail '
+                            . '(also under a lead ticket), fallback assignments, failed runs.',
                 ),
             )),
 

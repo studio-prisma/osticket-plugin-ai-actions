@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-07
+
+### Fixed
+
+- **No mail for a new ticket the AI agent hung under a lead ticket but left open.** A new, related request (same sender, different matter) was linked as a sub-ticket, assigned, and stayed silent: the after-run alert treated every sub-ticket as settled. Now only closed tickets stay quiet; an open sub-ticket gets the assigned alert like any other. The weekly summary lists only closed ones.
+
 ## [0.7.0] - 2026-11-03
 
 ### Added
