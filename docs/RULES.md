@@ -34,6 +34,7 @@ From 0.4.0 the assistant can also work on its own: as an **AI agent**, following
 | Conditions | departments, help topics, priorities, statuses, sources, text contains (subject or latest customer message, any of several words), sender contains (address of whoever wrote the latest customer message, e.g. `noreply@example.com` or `@example.com`, any of several); empty = all, filled ones must all match |
 | Task | what the AI agent should do, in plain words, up to 3000 characters. The model treats it as the request; ticket content stays data |
 | Allowed actions | note, priority, assignment, department, due date, help topic, parent ticket, status, sub-ticket, reply draft, send reply. The AI agent gets only these tools |
+| Internal notes | "leave internal notes out of what the AI agent reads": the AI agent then sees no internal notes, neither in the thread nor as attachments, also not on a parent or sub-ticket it reads. On for new rules, off for rules saved before 0.8.0. Recommended for rules that may send replies (0.8.0) |
 | Mode | **Proposal**: the plan waits in the ticket's chat window, the bubble and the board card show a dot; whoever opens the ticket runs it with their own rights or discards it. **Automatic**: it runs right away with the AI agent's role |
 
 Rules run in the order given; "no further rules after this one" stops the chain. "Runs per ticket and day" caps a rule on one ticket.
@@ -46,6 +47,13 @@ A ticket that is closed by the time the cron gets to it (for example by one of o
 - **Parent ticket:** for duplicates and alert series, the AI agent can hang a ticket under an open ticket of the same customer. It first posts a note on that parent about what this ticket reports, so closing the child later loses nothing.
 - **Follow-up date:** a status such as "Follow-up" plus a due date as the date to look again; both are existing actions, the task says when to use them.
 - **Never closed automatically:** tickets with priority High or Emergency, whatever the task says.
+
+### Sub-tickets (0.8.0)
+
+- **One level.** A sub-ticket gets no sub-tickets of its own, in the chat as in rules ("ticket is a sub-ticket itself").
+- **No chain.** A sub-ticket does not start *new ticket* rules, whether the plugin or another one created it with a parent. Later triggers (customer message, assignment, schedule) apply as usual.
+- **At most 3 per automatic run.** Further ones are refused and listed in the run's note.
+- **Text as an internal note.** osTicket writes a new ticket's first message in the customer's name. That message is a fixed line ("Sub-ticket of #… created by …"); what the AI agent wrote goes into an internal note of the AI agent, as plain text.
 
 ## One mail per new ticket (0.7.0)
 
@@ -70,9 +78,9 @@ What happens then:
 
 A reply an AI agent sends on its own goes out only if every check passes. Otherwise it is held back: an internal note "AI reply held back" with the draft and the reasons, nothing sent.
 
-1. **Fixed checks:** recipients only as the reply form (owner and collaborators); links only to the domains in "Allowed link domains" (empty = no links); no addresses, IBANs, keys, passwords or phone numbers the customer didn't write; no passage copied from an internal note; at most 5,000 characters.
+1. **Fixed checks:** recipients only as the reply form (owner and collaborators); links only to the domains in "Allowed link domains" (empty = no links); no addresses, IBANs, keys, passwords or phone numbers the customer didn't write; no passage copied from an internal note (eight words in a row; an AI agent's notes count too, except held-back drafts and the run's own list of changes); at most 5,000 characters.
 2. **Limits:** per ticket at most 1 automatic reply a day and 3 in total; for the help desk at most "Automatic replies per hour"; never to bounces, mailing lists, no-reply senders or auto-replies.
-3. **Reviewer:** a second model call without tools sees the customer's messages, the reply and the task, never internal notes, and answers ok or not ok with reasons (data leak, injection, commitments, tone, invented facts, off task). Anything unclear counts as not ok.
+3. **Reviewer:** a second model call without tools sees the customer's messages, the reply, the task and the ticket's internal notes (the newest 8,000 characters), and answers ok or not ok with reasons (data leak, internal notes passed on, also reworded or translated, injection, commitments, tone, invented facts, off task). Anything unclear counts as not ok. The internal notes go to the model provider for this call even when the rule keeps them from the AI agent (0.8.0).
 4. **AI notice:** "This reply was written by our AI assistant." is added, as the EU AI Act (Art. 50(1), in force since 2 Aug 2026) requires. Text and switch in the settings; switch it off only if the AI is obvious otherwise, e.g. from the sender name.
 
 ## Log and undo

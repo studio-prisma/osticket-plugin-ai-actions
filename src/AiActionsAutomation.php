@@ -158,6 +158,7 @@ final class AiActionsAutomation
         $guard = array();
         $sent = false;
         $assigned = false;
+        $created = 0;
         $notes = array();
         $since = self::lastEvent($ticket);
         AiActionsExtensions::bind($ticket, $agent);
@@ -178,6 +179,8 @@ final class AiActionsAutomation
                 $r = array('ok' => true);
             } elseif ($c['action'] === 'set_status' && self::urgentClose($ticket, $input['status'])) {
                 $r = array('ok' => false, 'error' => 'urgent');
+            } elseif ($c['action'] === 'create_subticket' && $created >= AiActionsExecutor::SUBTICKETS_PER_RUN) {
+                $r = array('ok' => false, 'error' => 'subticket_limit');
             } elseif ($c['action'] === 'send_reply') {
                 $text = self::withDisclosure($input['text']);
                 $guard = AiActionsGuard::check($ticket, $input['text'], $rule, AiActionsController::reviewer());
@@ -188,8 +191,8 @@ final class AiActionsAutomation
                     $r = array('ok' => false, 'error' => 'held');
                     $errors = array();
                     $ticket->postNote(array(
-                        'title' => 'AI reply held back (rule "' . $rule['name'] . '")',
-                        'note'  => new TextThreadEntryBody("The send guard stopped this automatic reply: "
+                        'title' => AiActionsGuard::HELD_TITLE . ' (rule "' . $rule['name'] . '")',
+                        'note'  => AiActionsExecutor::textBody("The send guard stopped this automatic reply: "
                             . implode(', ', $guard['reasons']) . ".\n\nDraft:\n" . $text),
                     ), $errors, $agent);
                 }
@@ -198,6 +201,7 @@ final class AiActionsAutomation
                 $r = AiActionsExecutor::run($ticket, $agent, $c['action'], $input, $assigned, false, false);
             }
             $assigned = $assigned || ($r['ok'] && in_array($c['action'], array('assign_agent', 'assign_team'), true));
+            $created += $r['ok'] && $c['action'] === 'create_subticket' ? 1 : 0;
             $results[] = $line + array('ok' => $r['ok'], 'error' => $r['error'] ?? null, 'action' => $c['action'],
                                         'unchanged' => !empty($r['unchanged']), 'previous' => $r['previous'] ?? null);
             $ticket = Ticket::lookup($ticket->getId());
@@ -206,8 +210,8 @@ final class AiActionsAutomation
         $errors = array();
         $text = self::runNote($notes, $results, $t);
         $note = $ticket->postNote(array(
-            'title' => sprintf('AI action (automatic, %s, rule "%s")', (string) $agent->getName(), $rule['name']),
-            'note'  => new TextThreadEntryBody($text),
+            'title' => sprintf('%s, %s, rule "%s")', AiActionsGuard::RUN_TITLE, (string) $agent->getName(), $rule['name']),
+            'note'  => AiActionsExecutor::textBody($text),
         ), $errors, $agent, false);
         self::attribute($ticket, $since, $agent);
         self::log($rule, $ticket, $agent, 'auto', $plan['answer'], $results, $guard, $sent, $plan['tokens']);
@@ -366,7 +370,7 @@ final class AiActionsAutomation
             return false;
         }
         $errors = array();
-        $ticket->postNote(array('title' => 'AI action undone', 'note' => new TextThreadEntryBody(
+        $ticket->postNote(array('title' => 'AI action undone', 'note' => AiActionsExecutor::textBody(
             "Automatic run #$id undone by " . $thisstaff->getName() . ":\n" . implode("\n", $lines))), $errors, $thisstaff);
         return true;
     }
@@ -511,7 +515,7 @@ final class AiActionsAutomation
         $errors = array();
         $ticket->postNote(array(
             'title' => sprintf('%s (proposal of %s, rule "%s")', $t['note_title'], $agent ? (string) $agent->getName() : 'AI', $rule ? $rule['name'] : ''),
-            'note'  => new TextThreadEntryBody(AiActionsController::noteBody($rule ? $rule['task'] : '', $results, $t)),
+            'note'  => AiActionsExecutor::textBody(AiActionsController::noteBody($rule ? $rule['task'] : '', $results, $t)),
         ), $errors, $staff);
         db_query(sprintf("UPDATE `%s` SET state='done', results=%s WHERE id=%d", self::proposalTable(), self::quote(json_encode($results)), $id));
         return array('ok' => true, 'results' => $results);

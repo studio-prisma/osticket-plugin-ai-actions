@@ -375,7 +375,7 @@ final class AiActionsController
         $errors = array();
         $note = $ticket->postNote(array(
             'title' => $t['note_title'],
-            'note'  => new TextThreadEntryBody(self::noteBody($run['prompt'], $public, $t)),
+            'note'  => AiActionsExecutor::textBody(self::noteBody($run['prompt'], $public, $t)),
         ), $errors, $thisstaff);
         $undoable = (bool) array_filter($results, function ($r) {
             return $r['ok'] && !$r['unchanged'] && AiActionsTools::undoable((string) $r['action']);
@@ -431,7 +431,7 @@ final class AiActionsController
         $errors = array();
         $ticket->postNote(array(
             'title' => $t['note_undo_title'],
-            'note'  => new TextThreadEntryBody(self::undoNoteBody($run['prompt'], $undone, $t)),
+            'note'  => AiActionsExecutor::textBody(self::undoNoteBody($run['prompt'], $undone, $t)),
         ), $errors, $thisstaff);
         AiActionsChatStore::planOutcome($staffId, (int) $ticket->getId(), $run['id'], 'undone', null, array('undo' => $undone));
 
@@ -826,13 +826,14 @@ final class AiActionsController
             return array('error' => $blocked);
         }
         AiActionsUsage::countRequest($agentId);
-        $context = self::context($agent, $ticket, 0);
+        $notes = empty($rule['hide_notes']);
+        $context = self::context($agent, $ticket, 0, $notes);
         $choices = AiActionsChoices::forTicket($ticket, $agent, in_array('send_reply', $rule['actions'], true));
         $context['options'] = AiActionsChoices::render($choices);
         $tz = $context['timezone'];
         $files = self::provider($info['model'] ?: self::$settings['model']) === 'anthropic';
-        $reader = static function (string $name, array $input) use ($ticket, $agent, $tz, $files) {
-            return AiActionsReaders::run($name, $input, $ticket, $agent, $tz, $files);
+        $reader = static function (string $name, array $input) use ($ticket, $agent, $tz, $files, $notes) {
+            return AiActionsReaders::run($name, $input, $ticket, $agent, $tz, $files, $notes);
         };
         AiActionsExtensions::bind($ticket, $agent);
         $system = AiActionsPlanner::system($context) . self::agentBrief((string) $agent->getName(), $rule, (string) $info['persona']);
@@ -902,11 +903,11 @@ final class AiActionsController
         return 'anthropic';
     }
 
-    private static function context($staff, $ticket, int $seenEntry = 0): array
+    private static function context($staff, $ticket, int $seenEntry = 0, bool $notes = true): array
     {
         $tz = AiActionsTime::zone($staff);
         $now = AiActionsTime::now($tz);
-        $data = AiActionsContext::data($ticket, $staff, $tz, $seenEntry, self::$settings['thread_chars']);
+        $data = AiActionsContext::data($ticket, $staff, $tz, $seenEntry, self::$settings['thread_chars'], $notes);
         return array(
             'now'        => $now->format('Y-m-d H:i'),
             'weekday'    => $now->format('l'),
