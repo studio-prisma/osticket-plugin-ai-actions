@@ -260,7 +260,7 @@ final class AiActionsGuard
         if (preg_match('/^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce)/', $from)) {
             return array('loop_sender');
         }
-        $last = $ticket->getThread()->getEntries()->filter(array('type' => 'M'))->order_by('-id')->first();
+        $last = self::entries($ticket, 'M')->order_by('-id')->first();
         if ($last) {
             $res = db_query(sprintf('SELECT headers FROM `%s` WHERE thread_entry_id=%d', TABLE_PREFIX . 'thread_entry_email', (int) $last->getId()));
             $row = $res ? db_fetch_row($res) : null;
@@ -296,11 +296,22 @@ final class AiActionsGuard
         return AiActionsController::settings()['link_domains'];
     }
 
+    /**
+     * Thread entries of one type, as a fresh query. The thread's own entry
+     * list can come back cached from an earlier filter in the same run (the
+     * rule's facts() reads the latest message first), and then holds the
+     * wrong entries.
+     */
+    private static function entries($ticket, string $type)
+    {
+        return ThreadEntry::objects()->filter(array('thread_id' => (int) $ticket->getThread()->getId(), 'type' => $type));
+    }
+
     /** Internal notes, oldest first, AI agents' included (see noteText()). */
     private static function notes($ticket): array
     {
         $out = array();
-        foreach ($ticket->getThread()->getEntries()->filter(array('type' => 'N'))->order_by('id') as $n) {
+        foreach (self::entries($ticket, 'N')->order_by('id') as $n) {
             $b = $n->getBody();
             $text = self::noteText((string) $n->getTitle(), $b ? (string) $b->getSearchable() : '',
                 (int) $n->staff_id > 0 && AiActionsAgents::isAgent((int) $n->staff_id));
@@ -340,7 +351,7 @@ final class AiActionsGuard
     private static function customerText($ticket): string
     {
         $out = '';
-        foreach ($ticket->getThread()->getEntries()->filter(array('type' => 'M')) as $m) {
+        foreach (self::entries($ticket, 'M')->order_by('id') as $m) {
             $b = $m->getBody();
             $out .= ($b ? (string) $b->getSearchable() : '') . "\n";
         }
@@ -354,7 +365,7 @@ final class AiActionsGuard
     private static function lastMessage($ticket): string
     {
         $parts = array();
-        foreach ($ticket->getThread()->getEntries()->filter(array('type' => 'M'))->order_by('id') as $m) {
+        foreach (self::entries($ticket, 'M')->order_by('id') as $m) {
             $b = $m->getBody();
             $parts[] = $b ? (string) $b->getSearchable() : '';
         }

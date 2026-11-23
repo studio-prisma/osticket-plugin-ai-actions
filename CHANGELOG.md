@@ -23,6 +23,7 @@ Security fixes from an internal review. Nothing here needs a setting changed to 
 
 ### Fixed
 
+- **AI agents in rules saw only the latest customer message.** Before a run, the rule's conditions read the latest message through the thread's entry list, which then stayed cached as that one entry; the AI agent's context, the send guard's customer text and its internal notes read the same list. An automatic or proposed run now reads the whole thread again (up to *Thread length*), as the chat always did. Expect longer prompts per run.
 - Notes the plugin writes (run notes, AI notes, held-back drafts, sub-ticket text, parent-ticket notes) were cut at the first `<` that looked like a tag: "if a<b then" ended after "if a". osTicket's clean-up balances HTML even in plain-text entries; the text is escaped first now.
 
 ## [0.7.1] - 2026-11-07

@@ -175,7 +175,10 @@ final class AiActionsRules
     public static function facts($ticket): array
     {
         $text = (string) $ticket->getSubject();
-        $last = $ticket->getThread()->getEntries()->filter(array('type' => 'M'))->order_by('-id')->first();
+        // A query of its own: filtering the thread's entry list would leave it
+        // cached as this one entry, and the AI agent's context reads that list next.
+        $last = ThreadEntry::objects()->filter(array('thread_id' => (int) $ticket->getThread()->getId(), 'type' => 'M'))
+            ->order_by('-id')->first();
         if ($last && ($body = $last->getBody())) {
             $text .= "\n" . $body->getSearchable();
         }
@@ -270,7 +273,7 @@ final class AiActionsRules
         if (!($ticket instanceof Ticket)) {
             return;
         }
-        $first = $thread->getEntries()->order_by('id')->first();
+        $first = ThreadEntry::objects()->filter(array('thread_id' => (int) $thread->getId()))->order_by('id')->first();
         if ($first && (int) $first->getId() === (int) $entry->getId()) {
             return;
         }

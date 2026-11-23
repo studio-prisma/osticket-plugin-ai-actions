@@ -144,3 +144,17 @@ test('F2: a rule can keep internal notes out of what the AI agent reads', () => 
   expect(hidden).toContain('Hello.');
   expect(php(`echo json_encode(AiActionsRules::normalise(array('hide_notes' => '1'))['hide_notes']);`)).toBe('true');
 });
+
+test('a rule run reads the whole thread, not only the latest message', () => {
+  // The runner checks the rule's conditions (facts()) before the AI agent reads the ticket.
+  // facts() used to leave the thread's entry list cached as the latest customer message.
+  const id = newTicket('Whole thread', 'First message.');
+  php(`$t = Ticket::lookup(${id}); $e = array(); $t->postNote(array('title' => 'N',`
+    + ` 'note' => new TextThreadEntryBody('A note in between.')), $e, Staff::lookup(1), false);`);
+  php(`$t = Ticket::lookup(${id}); $t->postMessage(array('message' => 'Second message.', 'userId' => $t->getUserId()), 'API');`);
+  const text = php(`$t = Ticket::lookup(${id}); AiActionsRules::facts($t);`
+    + ` echo AiActionsContext::data($t, Staff::lookup(${AGENT}), 'UTC')['text'];`);
+  expect(text).toContain('First message.');
+  expect(text).toContain('A note in between.');
+  expect(text).toContain('Second message.');
+});
