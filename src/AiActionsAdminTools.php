@@ -315,43 +315,30 @@ final class AiActionsAdminTools
         return $out ?: null;
     }
 
+    /** Object type => osTicket class whose ::lookup($id) proves the object exists. */
+    private const LOOKUP_CLASS = array(
+        'save_filter' => 'Filter', 'filter_email' => 'Filter',
+        'role' => 'Role',
+        'save_department' => 'Dept', 'dept' => 'Dept',
+        'save_team' => 'Team', 'team' => 'Team',
+        'agent' => 'Staff',
+        'priority' => 'Priority',
+        'topic' => 'Topic', 'save_topic' => 'Topic',
+        'save_canned' => 'Canned',
+        'save_list_item' => 'DynamicListItem',
+        'save_sla' => 'SLA', 'sla' => 'SLA',
+        'list' => 'DynamicList',
+    );
+
     private static function exists(string $type, int $id): bool
     {
-        switch ($type) {
-            case 'save_filter':
-            case 'filter_email':
-                return (bool) Filter::lookup($id);
-            case 'role':
-                return (bool) Role::lookup($id);
-            case 'save_department':
-                return (bool) Dept::lookup($id);
-            case 'save_team':
-            case 'team':
-                return (bool) Team::lookup($id);
-            case 'agent':
-                return (bool) Staff::lookup($id);
-            case 'priority':
-                return (bool) Priority::lookup($id);
-            case 'topic':
-                return (bool) Topic::lookup($id);
-            case 'save_canned':
-                return (bool) Canned::lookup($id);
-            case 'save_topic':
-                return (bool) Topic::lookup($id);
-            case 'save_list_item':
-                return (bool) DynamicListItem::lookup($id);
-            case 'save_sla':
-            case 'sla':
-                return (bool) SLA::lookup($id);
-            case 'dept':
-                return (bool) Dept::lookup($id);
-            case 'list':
-                return (bool) DynamicList::lookup($id);
-            case 'list_item_of':
-                $item = DynamicListItem::lookup(intdiv($id, 1000000));
-                return $item && (int) $item->list_id === $id % 1000000;
+        // Item and list packed into one id: item * 1000000 + list.
+        if ($type === 'list_item_of') {
+            $item = DynamicListItem::lookup(intdiv($id, 1000000));
+            return $item && (int) $item->list_id === $id % 1000000;
         }
-        return false;
+        $class = self::LOOKUP_CLASS[$type] ?? null;
+        return $class !== null && (bool) $class::lookup($id);
     }
 
     /** What the object is now: the fields a tool can change. */
