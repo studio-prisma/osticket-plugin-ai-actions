@@ -141,6 +141,8 @@ final class AiActionsI18n
                 'limit_tokens'      => 'Tageslimit für die AI erreicht. Morgen geht es weiter, oder der Admin hebt das Limit an.',
                 'urgent'            => 'nicht automatisch geschlossen: Priorität High oder Emergency',
                 'is_parent'         => 'Ticket hat selbst Unter-Tickets',
+                'is_subticket'      => 'Ticket ist selbst ein Unter-Ticket',
+                'subticket_limit'   => 'höchstens 3 Unter-Tickets pro automatischem Lauf',
             ),
         ) : array(
             'title'        => 'AI assistant',
@@ -261,6 +263,8 @@ final class AiActionsI18n
                 'limit_tokens'      => 'Daily AI limit reached. It resets tomorrow, or your admin can raise it.',
                 'urgent'            => 'not closed automatically: priority High or Emergency',
                 'is_parent'         => 'ticket has sub-tickets of its own',
+                'is_subticket'      => 'ticket is a sub-ticket itself',
+                'subticket_limit'   => 'at most 3 sub-tickets per automatic run',
             ),
         );
     }

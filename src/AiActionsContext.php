@@ -24,9 +24,10 @@ final class AiActionsContext
      * Facts always; thread entries newer than $since only (all on the first
      * turn of a conversation). Times are the agent's wall-clock time in $tz.
      *
+     * @param bool $notes false leaves internal notes out (a rule's "hide_notes")
      * @return array{text:string, last:int} last = highest entry ID seen
      */
-    public static function data($ticket, $staff, string $tz, int $since = 0, int $max = self::THREAD_MAX): array
+    public static function data($ticket, $staff, string $tz, int $since = 0, int $max = self::THREAD_MAX, bool $notes = true): array
     {
         $dbTz = AiActionsTime::dbZone();
         $owner = $ticket->getOwner();
@@ -51,8 +52,11 @@ final class AiActionsContext
         $entries = array();
         $last = $since;
         foreach ($ticket->getThread()->getEntries()->filter(array('id__gt' => $since))->order_by('-id') as $e) {
-            $body = $e->getBody();
             $last = max($last, (int) $e->getId());
+            if (!$notes && (string) $e->getType() === 'N') {
+                continue;
+            }
+            $body = $e->getBody();
             $entries[] = array(
                 'type'    => (string) $e->getType(),
                 'poster'  => (string) $e->getPoster(),
@@ -62,7 +66,7 @@ final class AiActionsContext
         }
 
         return array('text' => self::render($facts, $entries, $since > 0, $max, self::related($ticket, $staff, $dbTz, $tz),
-                     AiActionsReaders::listing($ticket)), 'last' => $last);
+                     AiActionsReaders::listing($ticket, $notes)), 'last' => $last);
     }
 
     /** Longest link target kept. Longer ones are tracking noise, the text stays. */

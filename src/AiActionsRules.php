@@ -134,6 +134,8 @@ final class AiActionsRules
             'days'         => max(1, min(365, is_scalar($in['days'] ?? null) ? (int) $in['days'] : 3)),
             'per_day'      => max(1, min(10, is_scalar($in['per_day'] ?? null) ? (int) $in['per_day'] : 1)),
             'stop'         => !empty($in['stop']),
+            // The AI agent doesn't read internal notes, so it can't pass them on.
+            'hide_notes'   => !empty($in['hide_notes']),
         );
     }
 
@@ -173,7 +175,10 @@ final class AiActionsRules
     public static function facts($ticket): array
     {
         $text = (string) $ticket->getSubject();
-        $last = $ticket->getThread()->getEntries()->filter(array('type' => 'M'))->order_by('-id')->first();
+        // A query of its own: filtering the thread's entry list would leave it
+        // cached as this one entry, and the AI agent's context reads that list next.
+        $last = ThreadEntry::objects()->filter(array('thread_id' => (int) $ticket->getThread()->getId(), 'type' => 'M'))
+            ->order_by('-id')->first();
         if ($last && ($body = $last->getBody())) {
             $text .= "\n" . $body->getSearchable();
         }
@@ -197,7 +202,7 @@ final class AiActionsRules
     /** Queues a job for every active rule of this trigger that matches. */
     public static function fire(string $trigger, $ticket, int $assignee = 0): void
     {
-        if (!$ticket || AiActionsController::settings()['auto_paused']) {
+        if (!$ticket || AiActionsController::settings()['auto_paused'] || self::ownSubticket($trigger, $ticket)) {
             return;
         }
         $facts = null;
@@ -217,6 +222,18 @@ final class AiActionsRules
                 break;
             }
         }
+    }
+
+    /**
+     * A sub-ticket does not start "new ticket" rules: one of them may create
+     * sub-tickets itself, and each new one would start it again. Covers the
+     * plugin's own (created while creatingSubticket(), before ticket_pid is
+     * set) and any ticket that already has a parent when it is created.
+     * Later triggers (customer message, assignment, schedule) still apply.
+     */
+    private static function ownSubticket(string $trigger, $ticket): bool
+    {
+        return $trigger === 'new_ticket' && (AiActionsExecutor::creatingSubticket() || AiActionsExecutor::parentOf($ticket) > 0);
     }
 
     /** A job of this rule for this ticket is waiting or running already. */
@@ -256,7 +273,7 @@ final class AiActionsRules
         if (!($ticket instanceof Ticket)) {
             return;
         }
-        $first = $thread->getEntries()->order_by('id')->first();
+        $first = ThreadEntry::objects()->filter(array('thread_id' => (int) $thread->getId()))->order_by('id')->first();
         if ($first && (int) $first->getId() === (int) $entry->getId()) {
             return;
         }
@@ -400,7 +417,8 @@ final class AiActionsRules
     private static function formView(?array $r, array $agents): string
     {
         $e = array('AiActionsAdmin', 'e');
-        $r = $r ?? (self::normalise(array()) + array('id' => 0, 'name' => '', 'position' => 0));
+        // A new rule starts with internal notes hidden; stored rules keep what they have.
+        $r = $r ?? (array('hide_notes' => true) + self::normalise(array()) + array('id' => 0, 'name' => '', 'position' => 0));
         $opt = static function (array $choices, $selected, bool $multi = false) use ($e): string {
             $out = '';
             foreach ($choices as $v => $l) {
@@ -453,6 +471,10 @@ final class AiActionsRules
             . $row('Task', sprintf('<textarea name="task" rows="8" cols="70" maxlength="%d">%s</textarea>', self::TASK_MAX, call_user_func($e, $r['task'])),
                 'What the AI agent should do, e.g. "Set the priority from the urgency the customer describes and assign the right team."')
             . $row('Allowed actions', $actions, 'The AI agent can only plan these. Its role still decides what is possible.')
+            . $row('Internal notes', sprintf('<label><input type="checkbox" name="hide_notes" value="1"%s> leave internal notes out of what the AI agent reads</label>',
+                $r['hide_notes'] ? ' checked' : ''),
+                'Recommended for rules that may send replies: what the AI agent never reads, it cannot pass on to the customer. '
+                . 'The send guard checks replies against the notes either way.')
             . $row('Mode', '<select name="mode">' . $opt(array('propose' => 'Proposal: a human confirms in the ticket', 'auto' => 'Automatic'), $r['mode']) . '</select>')
             . $row('Runs per ticket and day', sprintf('<input name="per_day" size="3" value="%d">', $r['per_day']))
             . $row('Order', sprintf('<input name="position" size="3" value="%d">', $r['position'])
