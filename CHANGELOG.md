@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.2] - 2026-11-23
+## [0.8.0] - 2026-11-23
 
 Security fixes from an internal review. Nothing here needs a setting changed to take effect, except the new rule option.
 
@@ -209,8 +209,8 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.7.2...HEAD
-[0.7.2]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.7.1...v0.7.2
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.5...v0.6.0

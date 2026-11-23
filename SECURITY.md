@@ -6,7 +6,7 @@ Only the latest minor release receives security fixes. Older tags are archived, 
 
 | Version | Supported |
 |---|---|
-| `0.7.x` | yes |
+| `0.8.x` | yes |
 | everything older | no |
 
 ## Reporting a Vulnerability
