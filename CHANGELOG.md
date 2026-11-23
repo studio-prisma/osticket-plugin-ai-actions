@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-23
+
+Security fixes from an internal review. Nothing here needs a setting changed to take effect, except the new rule option.
+
+### Security
+
+- **An automatic rule that creates sub-tickets no longer starts itself again on them.** A *new ticket* rule with the action *Sub-ticket* ran again on each sub-ticket it created, which created the next one: 15 chained tickets from one in three cron runs, unbounded with *Requests per day* set to 0, and reachable through text in a customer's message. Now a sub-ticket does not start *new ticket* rules, a sub-ticket gets no sub-tickets of its own (*ticket is a sub-ticket itself*), and an automatic run creates at most 3. The parent check reads the stored value, since a cron run that works on several jobs can hold an older copy of a ticket.
+- **The send guard's reviewer now reads the internal notes.** The word check catches only eight words in a row copied from a note; a note reworded or translated into the reply got past it, and the reviewer never saw the notes. It now gets them as `<internal_notes>` (the newest 8,000 characters) and refuses a reply that passes on what only they say (`review_internal`). Internal notes written by AI agents count for both checks too, except a held-back draft and the list of changes under a run's own note.
+- **A sub-ticket's text no longer stands in the thread as the customer's HTML.** osTicket writes a new ticket's first message in the customer's name, and the planned text was stored there as HTML. It could carry links or images, and the send guard took it for the customer's own words. The first message is now a fixed line; the text is an internal note of the AI agent, as plain text.
+
+### Added
+
+- Rule option **leave internal notes out of what the AI agent reads**: no internal notes in the thread, their attachments or a related ticket the AI agent reads. On for new rules, off for rules saved before, recommended for rules that may send replies ([RULES](docs/RULES.md)).
+
+### Fixed
+
+- Notes the plugin writes (run notes, AI notes, held-back drafts, sub-ticket text, parent-ticket notes) were cut at the first `<` that looked like a tag: "if a<b then" ended after "if a". osTicket's clean-up balances HTML even in plain-text entries; the text is escaped first now.
+
 ## [0.7.1] - 2026-11-07
 
 ### Fixed
@@ -190,7 +208,10 @@ First release.
 - Colours are themeable custom properties (see the head of `assets/ai-actions.css`).
 - The key file may start with a BOM and end with CRLF (panel file managers save it that way). A key file outside `open_basedir` is reported as such instead of "unreadable"; the install guide shows the Plesk `private` folder.
 
-[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.7.1...v0.7.2
+[0.7.1]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/studio-prisma/osticket-plugin-ai-actions/compare/v0.5.3...v0.5.4

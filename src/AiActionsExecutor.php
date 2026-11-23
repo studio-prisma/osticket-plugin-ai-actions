@@ -14,6 +14,23 @@ declare(strict_types=1);
  */
 final class AiActionsExecutor
 {
+    /** Sub-tickets one automatic run may create. */
+    public const SUBTICKETS_PER_RUN = 3;
+
+    /**
+     * True while subticket() creates a ticket. osTicket sends "ticket.created"
+     * from inside Ticket::create(), before ticket_pid is set; the rules use
+     * this to leave the plugin's own sub-tickets alone.
+     *
+     * @var bool
+     */
+    private static $creating = false;
+
+    public static function creatingSubticket(): bool
+    {
+        return self::$creating;
+    }
+
     /**
      * @param bool $assignedInRun an earlier change of the same plan assigned the ticket
      * @return array{ok:bool, error?:string, message?:string, previous?:mixed}
@@ -90,7 +107,7 @@ final class AiActionsExecutor
             return self::fail('forbidden');
         }
         $errors = array();
-        $note = $ticket->postNote(array('title' => '', 'note' => new TextThreadEntryBody($text)), $errors, $staff);
+        $note = $ticket->postNote(array('title' => '', 'note' => self::textBody($text)), $errors, $staff);
         return $note ? array('ok' => true) : self::fail('rejected', $errors);
     }
 
@@ -115,6 +132,17 @@ final class AiActionsExecutor
         return array('ok' => true);
     }
 
+    /**
+     * Plain text for a thread entry. osTicket's TextThreadEntryBody alone
+     * is not enough: its clean-up balances HTML and cuts "if a<b then"
+     * after "if a". Escaped first (htmlchars doesn't encode twice), the
+     * text arrives whole and shows as written.
+     */
+    public static function textBody(string $text)
+    {
+        return new TextThreadEntryBody(Format::htmlchars($text));
+    }
+
     /** Plain text as the reply editor's HTML: escaped, paragraphs and line breaks kept. */
     public static function html(string $text): string
     {
@@ -130,6 +158,15 @@ final class AiActionsExecutor
      * ticket_pid (how sub-ticket plugins and the Ticket Board read it).
      * Created with origin "staff" like the agent's own "New Ticket", which
      * needs a help topic: the parent's, else the default, else the first.
+     *
+     * osTicket posts a new ticket's first message in the customer's name.
+     * That message is a fixed line here; the planned text goes into an
+     * internal note of the agent, as plain text. Otherwise model output
+     * would stand in the thread as something the customer wrote, as HTML,
+     * and the send guard would count it as the customer's own words.
+     *
+     * A sub-ticket gets no sub-tickets of its own: one level, like the
+     * Ticket Board shows it, and no chain of automatic runs.
      */
     private static function subticket($ticket, $staff, string $subject, string $message): array
     {
@@ -139,24 +176,59 @@ final class AiActionsExecutor
         if (!$role || !$role->hasPerm(Ticket::PERM_CREATE)) {
             return self::fail('forbidden');
         }
+        if (self::parentOf($ticket) > 0) {
+            return self::fail('is_subticket');
+        }
         $topics = Topic::getHelpTopics(false, false) ?: array();
         $topic = (int) ($ticket->getTopicId() ?: ($cfg ? $cfg->getDefaultTopicId() : 0) ?: key($topics));
         $errors = array();
-        $child = Ticket::create(array(
-            'uid'     => $ticket->getOwnerId(),
-            'deptId'  => $ticket->getDeptId(),
-            'topicId' => $topic,
-            'subject' => $subject,
-            'message' => $message,
-            'source'  => 'Other',
-            'ip'      => (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
-        ), $errors, 'staff', false, false);
+        self::$creating = true;
+        try {
+            $child = Ticket::create(array(
+                'uid'     => $ticket->getOwnerId(),
+                'deptId'  => $ticket->getDeptId(),
+                'topicId' => $topic,
+                'subject' => $subject,
+                'message' => self::textBody(self::subticketLine((string) $ticket->getNumber(), (string) $staff->getName())),
+                'source'  => 'Other',
+                'ip'      => (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+            ), $errors, 'staff', false, false);
+        } finally {
+            self::$creating = false;
+        }
         if (!$child) {
             return self::fail('rejected', $errors);
         }
         $child->ticket_pid = $ticket->getId();
         $child->save();
-        return array('ok' => true, 'created' => (string) $child->getNumber());
+        $noteErrors = array();
+        $note = $child->postNote(array('title' => $subject, 'note' => self::textBody($message)), $noteErrors, $staff, false);
+        $r = array('ok' => true, 'created' => (string) $child->getNumber());
+        // The sub-ticket exists either way; say so rather than report a failure that can't be undone.
+        return $note ? $r : $r + array('message' => 'Text of the sub-ticket not saved: ' . self::firstError($noteErrors));
+    }
+
+    /**
+     * The parent's ID as stored. Within one request (a cron run works on
+     * several jobs) a looked-up ticket can be an older copy without the
+     * ticket_pid set since, so the object alone is not enough.
+     */
+    public static function parentOf($ticket): int
+    {
+        $pid = (int) $ticket->getPid();
+        if ($pid > 0) {
+            return $pid;
+        }
+        $res = db_query(sprintf('SELECT ticket_pid FROM %s WHERE ticket_id=%d', TICKET_TABLE, (int) $ticket->getId()));
+        $row = $res ? db_fetch_row($res) : null;
+        return $row ? (int) $row[0] : 0;
+    }
+
+    /** The first message of a sub-ticket: no model text in the customer's name. Public for the unit tests. */
+    public static function subticketLine(string $parentNumber, string $agentName): string
+    {
+        return sprintf('Sub-ticket of #%s, created by %s. The details are in the internal note.',
+            $parentNumber, AiActionsController::cleanName($agentName, 'an agent'));
     }
 
     /**
@@ -273,7 +345,7 @@ final class AiActionsExecutor
         $errors = array();
         $posted = $parent->postNote(array(
             'title' => sprintf('Sub-ticket #%s', $ticket->getNumber()),
-            'note'  => new TextThreadEntryBody($note . "\n\n#" . $ticket->getNumber() . ' ' . $ticket->getSubject()),
+            'note'  => self::textBody($note . "\n\n#" . $ticket->getNumber() . ' ' . $ticket->getSubject()),
         ), $errors, $staff);
         if (!$posted) {
             return self::fail('rejected', $errors);

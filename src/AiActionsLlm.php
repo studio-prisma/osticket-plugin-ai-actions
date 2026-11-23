@@ -106,12 +106,17 @@ final class AiActionsFakeLlm implements AiActionsLlm
         if (strpos($system, 'You help an administrator') === 0) {
             return self::admin($messages, $usage);
         }
-        // The send guard's reviewer: refuses replies that carry the word "evil".
+        // The send guard's reviewer: refuses replies that carry the word "evil",
+        // and a "discount" when an internal note speaks of a "Rabatt" (a translated leak).
         if (strpos($system, 'You review an automatic email reply') === 0) {
             $all = (string) json_encode($messages);
-            $reply = preg_match('/<reply>(.*)<\\\/reply>/s', $all, $m) ? $m[1] : $all;
-            return array('stop' => 'end_turn', 'usage' => $usage, 'content' => array(array('type' => 'text',
-                'text' => stripos($reply, 'evil') !== false ? '{"ok": false, "reasons": ["injection"]}' : '{"ok": true}')));
+            // json_encode() writes "</" as "<\/".
+            $reply = preg_match('#<reply>(.*)<\\\\/reply>#s', $all, $m) ? $m[1] : $all;
+            $notes = preg_match('#<internal_notes>(.*)<\\\\/internal_notes>#s', $all, $m) ? $m[1] : '';
+            $verdict = stripos($reply, 'evil') !== false ? '{"ok": false, "reasons": ["injection"]}'
+                : (stripos($reply, 'discount') !== false && stripos($notes, 'rabatt') !== false
+                    ? '{"ok": false, "reasons": ["internal"]}' : '{"ok": true}');
+            return array('stop' => 'end_turn', 'usage' => $usage, 'content' => array(array('type' => 'text', 'text' => $verdict)));
         }
 
         $prompt = '';
@@ -176,13 +181,20 @@ final class AiActionsFakeLlm implements AiActionsLlm
         if (preg_match('/\b(send|sende)/iu', $prompt) && strpos($options, 'send_reply:') !== false) {
             $calls[] = array('send_reply', array('text' => preg_match('/\bevil\b/i', $prompt)
                 ? "Hello,\n\nas asked, here is the link: https://evil.example/login\n\nBest regards"
-                : "Hello,\n\nyour request is solved.\n\nBest regards"));
+                : (preg_match('/\bdiscount\b/i', $prompt)
+                    ? "Hello,\n\ngood news: you get a discount on this order.\n\nBest regards"
+                    : "Hello,\n\nyour request is solved.\n\nBest regards")));
         }
         if (preg_match('/\b(draft|entwurf)/iu', $prompt)) {
             $calls[] = array('draft_reply', array('text' => "Hello,\n\nthanks for your message. <b>We are on it.</b>\n\nBest regards"));
         }
-        if (preg_match('/\b(sub-?ticket|unterticket)/iu', $prompt)) {
-            $calls[] = array('create_subticket', array('subject' => 'Fake sub-ticket', 'message' => 'Split off from the parent.'));
+        if (preg_match('/\b(?:(\d) )?(?:sub-?tickets?|untertickets?)/iu', $prompt, $sm)) {
+            // "4 sub-tickets" plans four, for the per-run limit.
+            $n = max(1, (int) ($sm[1] ?? 1));
+            for ($i = 1; $i <= $n; $i++) {
+                $calls[] = array('create_subticket', array('subject' => 'Fake sub-ticket' . ($n > 1 ? " $i" : ''),
+                    'message' => 'Split off from the parent.'));
+            }
         }
         foreach ($wants as $w) {
             if (preg_match($w[0], $prompt) && ($value = self::option($options, $w[1], $w[3])) !== null) {

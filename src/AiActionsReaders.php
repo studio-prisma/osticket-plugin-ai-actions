@@ -56,13 +56,17 @@ final class AiActionsReaders
 
     /**
      * Facts line per attachment of the ticket's thread, newest first.
+     * $notes false leaves those of internal notes out.
      *
      * @return string[]
      */
-    public static function listing($ticket): array
+    public static function listing($ticket, bool $notes = true): array
     {
         $lines = array();
         foreach ($ticket->getThread()->getEntries()->order_by('-id') as $e) {
+            if (!$notes && (string) $e->getType() === 'N') {
+                continue;
+            }
             foreach ($e->getAttachments() as $a) {
                 if (count($lines) >= self::LIST_MAX) {
                     $lines[] = '(more not listed)';
@@ -81,22 +85,23 @@ final class AiActionsReaders
 
     /**
      * Runs a read tool. Returns the tool_result content: a string, or
-     * blocks with a document or image for Claude.
+     * blocks with a document or image for Claude. $notes false: nothing
+     * from internal notes, on this ticket or a related one.
      *
      * @return string|array
      */
-    public static function run(string $name, array $input, $ticket, $staff, string $tz, bool $files)
+    public static function run(string $name, array $input, $ticket, $staff, string $tz, bool $files, bool $notes = true)
     {
         if ($name === 'read_related_ticket') {
-            return self::related((string) ($input['number'] ?? ''), $ticket, $staff, $tz);
+            return self::related((string) ($input['number'] ?? ''), $ticket, $staff, $tz, $notes);
         }
         if ($name === 'read_attachment') {
-            return self::attachment((string) ($input['id'] ?? ''), $ticket, $files);
+            return self::attachment((string) ($input['id'] ?? ''), $ticket, $files, $notes);
         }
         return 'Unknown tool.';
     }
 
-    private static function related(string $number, $ticket, $staff, string $tz)
+    private static function related(string $number, $ticket, $staff, string $tz, bool $notes = true)
     {
         $number = ltrim(trim($number), '#');
         if (!preg_match('/^[A-Za-z0-9-]{1,20}$/', $number) || !($other = Ticket::lookupByNumber($number))) {
@@ -110,13 +115,13 @@ final class AiActionsReaders
         if ((!$isChild && !$isParent && !$isCandidate) || !$other->checkStaffPerm($staff)) {
             return 'Only the parent ticket, sub-tickets and open tickets of the same customer the agent may open can be read.';
         }
-        return AiActionsContext::data($other, $staff, $tz, 0, 8000)['text'];
+        return AiActionsContext::data($other, $staff, $tz, 0, 8000, $notes)['text'];
     }
 
-    private static function attachment(string $id, $ticket, bool $files)
+    private static function attachment(string $id, $ticket, bool $files, bool $notes = true)
     {
         $a = ctype_digit($id) ? Attachment::lookup((int) $id) : null;
-        if (!$a || !self::belongs($a, $ticket) || !($f = $a->getFile())) {
+        if (!$a || !self::belongs($a, $ticket, $notes) || !($f = $a->getFile())) {
             return 'No such attachment on this ticket.';
         }
         $name = AiActionsController::cleanName((string) $a->getFilename(), 'file');
@@ -151,14 +156,15 @@ final class AiActionsReaders
         );
     }
 
-    /** The attachment hangs on an entry of this ticket's thread, nowhere else. */
-    private static function belongs($a, $ticket): bool
+    /** The attachment hangs on an entry of this ticket's thread, nowhere else (and not on a note, if hidden). */
+    private static function belongs($a, $ticket, bool $notes = true): bool
     {
         if ((string) ($a->type ?? '') !== 'H') {
             return false;
         }
         $entry = ThreadEntry::lookup((int) $a->object_id);
-        return $entry && (int) $entry->getThreadId() === (int) $ticket->getThread()->getId();
+        return $entry && (int) $entry->getThreadId() === (int) $ticket->getThread()->getId()
+            && ($notes || (string) $entry->getType() !== 'N');
     }
 
     /** Public for the unit tests. */

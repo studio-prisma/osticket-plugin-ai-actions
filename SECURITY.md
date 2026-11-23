@@ -6,7 +6,7 @@ Only the latest minor release receives security fixes. Older tags are archived, 
 
 | Version | Supported |
 |---|---|
-| `0.5.x` | yes |
+| `0.7.x` | yes |
 | everything older | no |
 
 ## Reporting a Vulnerability
@@ -43,6 +43,9 @@ Expected response: an acknowledgement within 7 days, an assessment within 30. Th
 - **Signing in as an AI agent**, or an AI agent doing more than its role and its rule's allowed actions.
 - **An automatic reply that passes the send guard** with a link outside the allowed domains, an address, number or secret the customer didn't write, text from an internal note, or past the rate and loop limits.
 - **A rule, AI agent or log entry changed by a non-admin**, or a proposal run by an agent who can't open the ticket.
+- **Automatic work that starts itself again**: a sub-ticket that starts a *new ticket* rule, a sub-ticket of a sub-ticket, more than 3 sub-tickets from one automatic run.
+- **Internal notes reaching the AI agent** of a rule that leaves them out, through the thread, an attachment or a related ticket.
+- **Model output in a customer's name**: planned text stored as a customer message, or as HTML in the thread.
 
 ## Out of Scope
 

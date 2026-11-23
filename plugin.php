@@ -9,7 +9,7 @@
 
 return array(
     'id'          => 'studio-prisma:ai-actions',
-    'version'     => '0.7.1',
+    'version'     => '0.7.2',
     'ost_version' => '1.18',
     'name'        => 'AI Actions',
     'author'      => 'Studio Prisma',
