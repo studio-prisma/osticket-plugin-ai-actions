@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **AI agents no longer stop for the rest of the day after a busy morning, unnoticed.** They counted against the chat's limit of 500,000 tokens per agent and day. A triage run reads the whole thread since 0.8.0 and costs about 20,000 tokens, so 25 alert mails used it up; every run after that failed with `limit_tokens`, and the only trace was the fallback's comment in each ticket. AI agents now have their own limits, *AI agents: runs* (500) and *AI agents: tokens* (2,000,000); the chat limits stay as they were.
+- **AI agents no longer stop for the rest of the day after a busy morning, unnoticed.** They counted against the chat's limit of 500,000 tokens per agent and day. A triage run costs about 20,000 tokens (more since 0.8.0, which reads the whole thread), so a morning with 25 alert mails used it up; every run after that failed with `limit_tokens`, and the only trace was the fallback's comment in each ticket. AI agents now have their own limits, *AI agents: runs* (500) and *AI agents: tokens* (2,000,000); the chat limits stay as they were.
 - The fallback's comment names a failed run's reason in words ("daily AI limit reached") instead of the error code.
 
 ### Added
