@@ -111,11 +111,13 @@ final class AiActionsAutomation
             return array('ok' => true, 'error' => 'per_day');
         }
         if (!$ticket->checkStaffPerm($agent)) {
+            AiActionsAlert::failed('agent_no_access', $agent, $rule, (int) $ticket->getId());
             return array('ok' => false, 'error' => 'agent_no_access');
         }
 
         $plan = AiActionsController::agentPlan($agent, $ticket, $rule, $info);
         if (isset($plan['error'])) {
+            AiActionsAlert::failed((string) $plan['error'], $agent, $rule, (int) $ticket->getId());
             return array('ok' => false, 'error' => $plan['error']);
         }
         if (!$plan['changes']) {

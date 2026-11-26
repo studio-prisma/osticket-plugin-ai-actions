@@ -230,6 +230,8 @@ final class AiActionsNotify
     {
         $n = $t['notify'];
         [$code, $detail] = array_pad(explode(':', $why, 2), 2, '');
+        // "failed:limit_tokens" reads as "run failed (daily limit …)", not the bare code.
+        $detail = $detail !== '' ? (string) ($t['errors'][$detail] ?? $detail) : '';
         $line = sprintf($n['fallback'], ($n['reasons'][$code] ?? $code) . ($detail !== '' ? ' (' . $detail . ')' : ''));
         $answer = trim($answer);
         return $answer !== '' ? $line . "\n\n" . $n['ai_said'] . ":\n" . mb_substr($answer, 0, 3000) : $line;

@@ -287,13 +287,13 @@ class AiActionsConfig extends PluginConfig
             )),
 
             'sec_limits' => new SectionBreakField(array(
-                'label' => 'Limits per agent and day',
+                'label' => 'Limits per day',
             )),
 
             'daily_requests' => new TextboxField(array(
                 'label'         => 'Messages',
                 'default'       => '100',
-                'hint'          => 'Messages to the AI per agent and day. 0 = no limit.',
+                'hint'          => 'Chat messages to the AI per agent and day. 0 = no limit.',
                 'configuration' => array('size' => 8, 'length' => 6, 'validator' => 'number'),
             )),
 
@@ -302,6 +302,22 @@ class AiActionsConfig extends PluginConfig
                 'default'       => '500000',
                 'hint'          => 'Input plus output tokens per agent and day. A message costs about '
                                  . '1,000 to 5,000. 0 = no limit.',
+                'configuration' => array('size' => 12, 'length' => 10, 'validator' => 'number'),
+            )),
+
+            'agent_daily_requests' => new TextboxField(array(
+                'label'         => 'AI agents: runs',
+                'default'       => '500',
+                'hint'          => 'Rule runs per AI agent and day. 0 = no limit. When reached, runs fail '
+                                 . 'until midnight, the fallback assigns, and the admin gets one mail a day.',
+                'configuration' => array('size' => 8, 'length' => 6, 'validator' => 'number'),
+            )),
+
+            'agent_daily_tokens' => new TextboxField(array(
+                'label'         => 'AI agents: tokens',
+                'default'       => '2000000',
+                'hint'          => 'Input plus output tokens per AI agent and day. A triage run costs about '
+                                 . '20,000 to 35,000. 0 = no limit.',
                 'configuration' => array('size' => 12, 'length' => 10, 'validator' => 'number'),
             )),
 

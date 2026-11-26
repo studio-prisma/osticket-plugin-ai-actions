@@ -81,8 +81,10 @@ Short version:
 | Model | Claude Sonnet 5.5 | Also Claude Opus 5.5, GPT-6.1 Sol/Terra, Mistral Large/Medium. The model picks the provider; the key must be one of that provider (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`) |
 | Effort | Low | How long the model thinks. Low is enough for most requests |
 | Pages the assistant may read | empty | Claude only. Domains whose pages the assistant may open from links in the ticket, e.g. a vendor's security advisories. Anthropic fetches the page (at most 3 per request), not your server. Empty = off |
-| Messages | 100 | Per agent and day, 0 = no limit |
-| Tokens | 500,000 | Input plus output per agent and day, 0 = no limit |
+| Messages | 100 | Chat messages per agent and day, 0 = no limit |
+| Tokens | 500,000 | Input plus output per agent and day in the chat, 0 = no limit |
+| AI agents: runs | 500 | Rule runs per AI agent and day, 0 = no limit |
+| AI agents: tokens | 2,000,000 | Input plus output per AI agent and day; a triage run costs about 20,000 to 35,000. 0 = no limit |
 | Thread length | 12,000 | Characters of the thread the model reads, newest first (2,000 to 50,000) |
 | Name of the assistant | empty | Window header and bubble label. Empty: "AI assistant" |
 | Icon | Sparkles | Sparkles, robot, speech bubble, light bulb, lightning bolt, first letter of the name, or own image |

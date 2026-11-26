@@ -210,9 +210,17 @@ final class AiActionsAdmin
                 count($bad) === 1 ? 'An AI agent has an address no mail server delivers to' : 'AI agents have addresses no mail server delivers to',
                 self::e(implode(', ', array_map(static function ($a) { return $a['name'] . ' <' . $a['email'] . '>'; }, $bad))))
             : 'Every AI agent has a deliverable address.';
+        $limited = AiActionsAlert::limited();
+        $limits = $limited
+            ? '<span class="error">' . self::e(implode('; ', array_map(static function ($a) {
+                return $a['name'] . ': ' . $a['what'];
+            }, $limited))) . ' today. Its runs fail until midnight and the fallback assigns without the AI. '
+              . 'Raise "AI agents: tokens" or "AI agents: runs" in the plugin settings.</span>'
+            : 'No AI agent has reached its daily limit.';
         return '<h2>Status</h2><table class="list" width="100%"><tbody>'
             . '<tr><td width="220">osTicket cron</td><td>' . $cron . '</td></tr>'
             . '<tr><td>AI agents\' email</td><td>' . $mail . '</td></tr>'
+            . '<tr><td>Daily limits</td><td>' . $limits . '</td></tr>'
             . sprintf('<tr><td>Jobs</td><td>%d queued, %d running, %d done, %d failed (last 30 days)</td></tr>',
                 $c['queued'], $c['running'], $c['done'], $c['failed'])
             . '<tr><td>Automatic work</td><td>' . ((AiActionsController::settings()['auto_paused'] ?? false)
