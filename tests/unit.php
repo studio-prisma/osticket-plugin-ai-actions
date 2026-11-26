@@ -536,6 +536,27 @@ check('settings: limits clamped, 0 kept', $s['daily_requests'] === 0 && $s['dail
 $s = AiActionsController::normalise(array('daily_requests' => '-5', 'daily_tokens' => 'lots', 'thread_chars' => array()));
 check('settings: junk falls back to defaults', $s['daily_requests'] === 100 && $s['daily_tokens'] === 500000 && $s['thread_chars'] === 12000);
 
+$s = AiActionsController::normalise(array());
+check('settings: AI agents have their own, higher limits', $s['agent_daily_requests'] === 500 && $s['agent_daily_tokens'] === 2000000);
+$s = AiActionsController::normalise(array('agent_daily_requests' => '0', 'agent_daily_tokens' => 'x'));
+check('settings: AI agent limits 0 kept, junk to default', $s['agent_daily_requests'] === 0 && $s['agent_daily_tokens'] === 2000000);
+
+check('alert: daily limits and setup errors alert, outages do not',
+    AiActionsAlert::wanted('limit_tokens') && AiActionsAlert::wanted('agent_no_access') && AiActionsAlert::wanted('model_auth')
+    && !AiActionsAlert::wanted('model_unavailable') && !AiActionsAlert::wanted('no_match') && !AiActionsAlert::wanted('closed'));
+$seen = array();
+check('alert: once per agent, reason and day',
+    AiActionsAlert::firstToday($seen, 5, 'limit_tokens', '2026-11-26')
+    && !AiActionsAlert::firstToday($seen, 5, 'limit_tokens', '2026-11-26')
+    && AiActionsAlert::firstToday($seen, 5, 'limit_requests', '2026-11-26')
+    && AiActionsAlert::firstToday($seen, 6, 'limit_tokens', '2026-11-26')
+    && AiActionsAlert::firstToday($seen, 5, 'limit_tokens', '2026-11-27'));
+[$subj, $body] = AiActionsAlert::text('Triage Assistent', 'Triage neuer Tickets', 'limit_tokens',
+    array('requests' => 25, 'tokens' => 512345), array('requests' => 500, 'tokens' => 500000), 42);
+check('alert: mail names agent, usage and the setting to raise',
+    strpos($subj, 'Triage Assistent') !== false && strpos($body, '512,345 of its 500,000 tokens') !== false
+    && strpos($body, 'AI agents: tokens') !== false && strpos($body, 'fallback') !== false, $body);
+
 $many = array();
 for ($i = 0; $i < 10; $i++) {
     $many[] = array('type' => 'M', 'poster' => 'C', 'created' => "x$i", 'text' => str_repeat('z', 900) . " #$i");
@@ -1103,6 +1124,9 @@ check('notify: note text becomes escaped HTML with line breaks',
     AiActionsNotify::html("Klasse: <b>WORK</b>\nNächster Schritt") === 'Klasse: &lt;b&gt;WORK&lt;/b&gt;<br>' . "\n" . 'Nächster Schritt');
 $de = AiActionsI18n::strings('de');
 $fb = AiActionsNotify::fallbackText($de, 'failed:rate_limited', '');
+$fbl = AiActionsNotify::fallbackText($de, 'failed:limit_tokens', '');
+check('fallback: known error codes in words', strpos($fbl, 'Lauf fehlgeschlagen (Tageslimit') !== false
+    && strpos($fbl, 'limit_tokens') === false, $fbl);
 check('fallback: says why, with the error', strpos($fb, 'nicht zugewiesen: Lauf fehlgeschlagen (rate_limited)') !== false, $fb);
 $fb = AiActionsNotify::fallbackText($de, 'not_assigned', 'Klasse: SPAM');
 check('fallback: carries the AI answer when there is one', strpos($fb, "Antwort der KI:\nKlasse: SPAM") !== false, $fb);

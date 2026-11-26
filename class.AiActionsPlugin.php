@@ -39,6 +39,7 @@ require_once __DIR__ . '/src/AiActionsPlanner.php';
 require_once __DIR__ . '/src/AiActionsRunStore.php';
 require_once __DIR__ . '/src/AiActionsChatStore.php';
 require_once __DIR__ . '/src/AiActionsUsage.php';
+require_once __DIR__ . '/src/AiActionsAlert.php';
 require_once __DIR__ . '/src/AiActionsExecutor.php';
 require_once __DIR__ . '/src/AiActionsAssets.php';
 require_once __DIR__ . '/src/AiActionsController.php';
@@ -54,7 +55,7 @@ require_once __DIR__ . '/src/AiActionsNotify.php';
 class AiActionsPlugin extends Plugin
 {
     /** Mirrors plugin.php; used for cache-busting the asset URLs only. */
-    public const VERSION = '0.8.0';
+    public const VERSION = '0.8.1';
 
     /** Route base, relative to ROOT_PATH. */
     public const STAFF_BASE = 'scp/ajax.php/ai';
@@ -90,6 +91,8 @@ class AiActionsPlugin extends Plugin
             'key_file' => $config->get('key_file'),
             'daily_requests' => $config->get('daily_requests'),
             'daily_tokens'   => $config->get('daily_tokens'),
+            'agent_daily_requests' => $config->get('agent_daily_requests'),
+            'agent_daily_tokens'   => $config->get('agent_daily_tokens'),
             'thread_chars'   => $config->get('thread_chars'),
             'history_days'   => $config->get('history_days'),
             'name'     => $config->get('assistant_name'),

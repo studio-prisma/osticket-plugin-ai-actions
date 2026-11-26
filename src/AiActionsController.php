@@ -29,7 +29,8 @@ final class AiActionsController
     /** @var array */
     private static $settings = array('enabled' => false, 'roles' => array(), 'model' => 'claude-opus-5-5',
                                      'effort' => 'low', 'key_source' => 'file', 'key_file' => '', 'daily_requests' => 100,
-                                     'daily_tokens' => 500000, 'thread_chars' => 12000, 'history_days' => 90,
+                                     'daily_tokens' => 500000, 'agent_daily_requests' => 500,
+                                     'agent_daily_tokens' => 2000000, 'thread_chars' => 12000, 'history_days' => 90,
                                      'name' => '', 'icon' => 'sparkles', 'image' => '', 'accent' => '', 'welcome' => '',
                                      'allow_send' => false, 'auto_paused' => false, 'ai_notice' => true,
                                      'ai_notice_text' => 'This reply was written by our AI assistant.', 'link_domains' => array(),
@@ -71,6 +72,9 @@ final class AiActionsController
             // 0 = no limit, for admins who cap spend in the Anthropic console instead.
             'daily_requests' => self::number($raw['daily_requests'] ?? null, 100, 0, 10000),
             'daily_tokens'   => self::number($raw['daily_tokens'] ?? null, 500000, 0, 100000000),
+            // AI agents work through bursts of alert mails: own, higher limits.
+            'agent_daily_requests' => self::number($raw['agent_daily_requests'] ?? null, 500, 0, 100000),
+            'agent_daily_tokens'   => self::number($raw['agent_daily_tokens'] ?? null, 2000000, 0, 1000000000),
             'thread_chars'   => self::number($raw['thread_chars'] ?? null, 12000, 2000, 50000),
             // 0 = earlier conversations are not kept.
             'history_days'   => self::number($raw['history_days'] ?? null, 90, 0, 3650),
@@ -821,7 +825,8 @@ final class AiActionsController
             return array('error' => 'not_configured');
         }
         $agentId = (int) $agent->getId();
-        $blocked = AiActionsUsage::blocked(AiActionsUsage::today($agentId), self::$settings['daily_requests'], self::$settings['daily_tokens']);
+        $blocked = AiActionsUsage::blocked(AiActionsUsage::today($agentId), self::$settings['agent_daily_requests'],
+            self::$settings['agent_daily_tokens']);
         if ($blocked !== null) {
             return array('error' => $blocked);
         }
