@@ -75,7 +75,8 @@ test('the chat limit no longer stops AI agents', () => {
   const id = newTicket('Agent limit', 'Please set a due date for tomorrow');
   cron();
   expect(jobError(id)).toBe('done:');
-  expect(Number(sql(`SELECT tokens FROM ost_ai_actions_log WHERE ticket_id=${id} ORDER BY id DESC LIMIT 1`))).toBeGreaterThan(0);
+  // The model was called and its plan ran (the offline model reports no tokens).
+  expect(sql(`SELECT mode FROM ost_ai_actions_log WHERE ticket_id=${id} ORDER BY id DESC LIMIT 1`)).toBe('auto');
 });
 
 test('AI agent limit reached: runs fail, one admin mail, system log, status tab', async ({ page, request }) => {
