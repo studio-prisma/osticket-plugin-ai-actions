@@ -24,10 +24,10 @@ jobs:
         php: ["8.1", "8.2", "8.3", "8.4"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           coverage: none
@@ -48,10 +48,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
 
@@ -64,10 +64,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -75,7 +75,7 @@ jobs:
 
       # The chat has to work in the board's quick view (spec 2-board).
       - name: Check out the Ticket Board plugin
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: studio-prisma/osticket-plugin-board
           path: dev/local/plugins/board
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload report
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-report
           path: |
@@ -118,15 +118,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: actionlint
-        uses: raven-actions/actionlint@v2
+        uses: studio-prisma/github-config-security-workflow/.github/actions/actionlint@780e3012406a3997f465b04dad9fc52a3a82e5bd # v1.2.1
 
   # Zentraler Security-Scan: gitleaks, TruffleHog, Trivy, Semgrep (alle blockierend).
   # Semgrep blockiert nur neue Funde. Version: Commit des Release-Tags, siehe Kommentar.
   security:
-    uses: studio-prisma/github-config-security-workflow/.github/workflows/security.yml@510cea39c4ecb83fb25fdfca88649dc014eae883 # v1.1.0
+    uses: studio-prisma/github-config-security-workflow/.github/workflows/security.yml@780e3012406a3997f465b04dad9fc52a3a82e5bd # v1.2.1
     with:
       semgrep-rules: "p/php p/javascript p/security-audit"
     secrets:
